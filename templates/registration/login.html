@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Вход — WOOM FIT{% endblock %}
+{% block content %}
+  <h2 class="section-title">Вход</h2>
+  <form method="post" class="card">
+    {% csrf_token %}
+    <div class="list">
+      <div>
+        <label class="muted" style="font-weight:900;">Логин</label>
+        <input type="text" name="username" required>
+      </div>
+      <div>
+        <label class="muted" style="font-weight:900;">Пароль</label>
+        <input type="password" name="password" required>
+      </div>
+    </div>
+    <div style="margin-top:14px;">
+      <button class="btn btn--primary btn--full" type="submit">Войти</button>
+    </div>
+  </form>
+    <div class="muted" style="text-align:center; margin-top:12px; font-weight:800;">
+  Нет аккаунта?
+  <a href="{% url 'accounts:signup' %}" style="color:var(--pink); font-weight:900;">Зарегистрироваться</a>
+</div>
+
+{% endblock %}

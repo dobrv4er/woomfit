@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Корзина — WOOM FIT{% endblock %}
+{% block topbar_left %}
+  <a class="btn btn--ghost" style="padding:8px 10px; border-radius:14px;" href="{% url 'shop:index' %}">←</a>
+{% endblock %}
+{% block content %}
+  <h2 class="section-title" style="margin-top:6px;">Корзина</h2>
+
+  <div class="card" style="display:flex; align-items:center; gap:10px;">
+    <div style="font-size:22px;">🛡️</div>
+    <div style="font-weight:900;">Безопасная оплата заказа</div>
+  </div>
+
+  <h2 class="section-title">Моя корзина</h2>
+
+  {% if items %}
+    <div class="card">
+      <div class="list">
+        {% for it in items %}
+          <div class="item">
+            <div style="min-width:0;">
+              <div class="item__title">{{ it.name }}</div>
+              <div class="muted" style="font-weight:900;">{{ it.price_rub }} руб.</div>
+            </div>
+
+            <form method="post" action="{% url 'shop:cart_set' it.product_id %}" style="display:flex; gap:8px; align-items:center;">
+              {% csrf_token %}
+              <button class="btn btn--muted" type="submit" name="qty" value="{{ it.qty|add:'-1' }}">−</button>
+              <div style="min-width:18px; text-align:center; font-weight:900;">{{ it.qty }}</div>
+              <button class="btn btn--muted" type="submit" name="qty" value="{{ it.qty|add:'1' }}">+</button>
+            </form>
+          </div>
+        {% endfor %}
+      </div>
+
+      <div style="height:12px;"></div>
+
+      <div class="item" style="background:#f8fafc;">
+        <div class="muted" style="font-weight:900;">Промокод/сертификат</div>
+        <div class="item__chev">›</div>
+      </div>
+
+      <div style="height:12px;"></div>
+
+      <div style="display:flex; justify-content:space-between; font-weight:900;">
+        <div class="muted">Товары</div>
+        <div>{{ total_rub }} руб.</div>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-weight:900; margin-top:6px;">
+        <div class="muted">Итого к оплате</div>
+        <div style="font-size:22px;">{{ total_rub }} руб.</div>
+      </div>
+
+      <div style="margin-top:14px; display:grid; gap:10px;">
+        <form method="post" action="{% url 'orders:checkout' %}">
+          {% csrf_token %}
+          <button class="btn btn--primary btn--full" type="submit">Оплатить картой</button>
+        </form>
+
+        <form method="post" action="{% url 'orders:checkout_wallet' %}">
+          {% csrf_token %}
+          <button
+            class="btn btn--muted btn--full"
+            type="submit"
+            {% if not user.is_authenticated %}disabled{% endif %}
+            {% if user.is_authenticated and not can_pay_wallet %}disabled{% endif %}
+          >
+            Оплатить кошельком
+            {% if wallet_balance is not None %}
+              (баланс {{ wallet_balance }} ₽)
+            {% endif %}
+          </button>
+        </form>
+
+        {% if not user.is_authenticated %}
+          <div class="muted" style="text-align:center; font-weight:800;">
+            Чтобы оплатить кошельком, нужно <a href="{% url 'accounts:login' %}" style="color:var(--pink); font-weight:900;">войти</a>.
+          </div>
+        {% elif not can_pay_wallet and total_rub > 0 %}
+          <div class="muted" style="text-align:center; font-weight:800;">
+            Недостаточно средств в кошельке. Пополнить можно через товары «Пополнение кошелька».
+          </div>
+        {% endif %}
+      </div>
+
+      <div class="muted" style="text-align:center; margin-top:10px; font-weight:800;">
+        Нажимая на кнопку, вы соглашаетесь с
+        <a href="#" style="color:var(--pink); font-weight:900;">правилами</a> и
+        <a href="#" style="color:var(--pink); font-weight:900;">условиями использования</a>
+      </div>
+    </div>
+  {% else %}
+    <div class="card" style="text-align:center;">
+      <div class="muted" style="font-weight:900;">Корзина пуста</div>
+      <div style="margin-top:12px;">
+        <a class="btn btn--primary" href="{% url 'shop:index' %}">В магазин</a>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}

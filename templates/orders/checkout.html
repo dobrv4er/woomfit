@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Оформление — WOOM FIT{% endblock %}
+{% block topbar_left %}
+  <a class="btn btn--ghost" style="padding:8px 10px; border-radius:14px;" href="{% url 'shop:cart' %}">←</a>
+{% endblock %}
+{% block content %}
+  <h2 class="section-title">Оформление заказа</h2>
+  <div class="card">
+    <div class="list">
+      {% for it in items %}
+        <div class="item">
+          <div style="min-width:0;">
+            <div class="item__title">{{ it.name }}</div>
+            <div class="muted" style="font-weight:900;">{{ it.price_rub }} руб. × {{ it.qty }}</div>
+          </div>
+          <div style="font-weight:900;">{{ it.price_rub|floatformat:0 }} руб.</div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="item" style="margin-top:12px; background:#f8fafc;">
+      <div class="muted" style="font-weight:900;">Итого</div>
+      <div style="font-weight:900; font-size:20px;">{{ total_rub }} руб.</div>
+    </div>
+
+    <form method="post" style="margin-top:12px;">
+      {% csrf_token %}
+      <button class="btn btn--primary btn--full" type="submit">Оплатить через T‑Bank</button>
+    </form>
+
+    <div class="muted" style="text-align:center; margin-top:10px; font-weight:800;">
+      После нажатия вы будете перенаправлены на платежную страницу.
+    </div>
+  </div>
+{% endblock %}

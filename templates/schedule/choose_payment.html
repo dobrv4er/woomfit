@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Оплата занятия — WOOM FIT{% endblock %}
+
+{% block topbar_left %}
+  <a class="btn btn--ghost" style="padding:8px 10px; border-radius:14px;" href="{% url 'schedule:detail' s.id %}">←</a>
+{% endblock %}
+
+{% block content %}
+<style>
+  .sheet{
+    border-radius:18px;
+    background:#fff;
+    box-shadow: 0 10px 18px rgba(0,0,0,0.10);
+    padding:14px;
+  }
+  .opt{
+    display:flex;
+    align-items:flex-start;
+    gap:12px;
+    padding:12px;
+    border-radius:16px;
+    background:#f8fafc;
+  }
+  .opt + .opt{ margin-top:10px; }
+  .opt input{ margin-top:4px; }
+  .opt .t{ font-weight:900; }
+  .opt .d{ font-weight:800; opacity:.65; font-size:13px; margin-top:2px; }
+  .mselect{ margin-top:10px; }
+  .mitem{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:10px 12px;
+    border-radius:14px;
+    background:#ffffff;
+    border:1px solid rgba(0,0,0,0.06);
+  }
+  .mitem + .mitem{ margin-top:8px; }
+  .mleft{ min-width:0; }
+  .mttl{ font-weight:900; }
+  .msub{ font-weight:800; opacity:.65; font-size:13px; margin-top:2px; }
+</style>
+
+<h2 class="section-title" style="margin-top:6px;">Как оплатить тренировку?</h2>
+
+<div class="card">
+  <div style="font-weight:900; font-size:18px;">{{ s.title }}</div>
+  <div class="muted" style="font-weight:900; margin-top:6px;">
+    {{ s.start_at|date:"d.m.Y H:i" }} • {{ s.location }}
+  </div>
+</div>
+
+<div style="height:12px;"></div>
+
+<form method="post" class="sheet">
+  {% csrf_token %}
+
+  <label class="opt">
+    <input type="radio" name="method" value="membership" {% if memberships %}checked{% endif %}>
+    <div>
+      <div class="t">Абонемент</div>
+      <div class="d">Списать 1 занятие с выбранного абонемента</div>
+
+      <div class="mselect">
+        {% if memberships %}
+          {% for m in memberships %}
+            <label class="mitem">
+              <div class="mleft">
+                <div class="mttl">{{ m.title }}</div>
+                <div class="msub">
+                  {% if m.kind == 'visits' %}
+                    Осталось посещений: {{ m.left_visits|default:"∞" }}
+                  {% else %}
+                    Активен по времени
+                  {% endif %}
+                </div>
+              </div>
+              <div>
+                <input type="radio" name="membership_id" value="{{ m.id }}" required>
+              </div>
+            </label>
+          {% endfor %}
+        {% else %}
+          <div class="muted" style="font-weight:900;">Нет подходящих абонементов</div>
+        {% endif %}
+      </div>
+    </div>
+  </label>
+
+  <label class="opt">
+    <input type="radio" name="method" value="pay" {% if not memberships %}checked{% endif %}>
+    <div>
+      <div class="t">Оплата</div>
+      <div class="d">Кошелёк или онлайн (после оплаты создадим разовый абонемент на 1 посещение)</div>
+    </div>
+  </label>
+
+  <div style="height:12px;"></div>
+  <button class="btn btn--primary btn--full" type="submit">Продолжить</button>
+
+  <div class="muted" style="text-align:center; margin-top:12px; font-weight:800;">
+    Если вы оплатите разово — у вас появится абонемент на 1 посещение. При отмене записи посещение вернётся.
+  </div>
+</form>
+
+{% endblock %}

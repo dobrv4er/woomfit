@@ -1,0 +1,981 @@
+{% extends "admin/base_site.html" %}
+{% load l10n %}
+{% block title %}Планирование — WOOM FIT{% endblock %}
+
+{% block extrastyle %}
+<style>
+  .crm-wrap{padding:16px;}
+  .crm-topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:12px; margin-bottom:12px;
+  }
+  .crm-left{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .crm-title{font-weight:900; font-size:18px;}
+  .crm-btn{
+    display:inline-flex; align-items:center; justify-content:center;
+    padding:8px 12px; border-radius:10px; border:1px solid #d0d7de;
+    background:#fff; color:#111; text-decoration:none;
+    cursor:pointer; user-select:none;
+  }
+  .crm-btn:hover{background:#f6f8fa;}
+  .crm-btn.primary{
+    background:#e91e63; color:#fff; border-color:#e91e63;
+  }
+  .crm-btn.primary:hover{filter:brightness(0.95);}
+  .crm-select, .crm-input{
+    padding:8px 10px; border-radius:10px; border:1px solid #d0d7de;
+    background:#fff;
+  }
+  .crm-grid{
+    display:grid;
+    grid-template-columns: 90px 1fr;
+    gap:12px;
+  }
+  .crm-hours{
+    padding-top:40px;
+  }
+  .crm-hour{
+    height:72px;
+    display:flex; align-items:flex-start; justify-content:flex-end;
+    font-size:12px; color:#6b7280;
+    padding-right:8px;
+    border-top:1px solid rgba(0,0,0,0.04);
+  }
+
+  .crm-board{
+    display:grid;
+    grid-template-columns: repeat({{ columns|length }}, minmax(240px, 1fr));
+    gap:12px;
+    overflow:auto;
+    padding-bottom:24px;
+  }
+
+  .crm-col{
+    background:#fff;
+    border:1px solid #e5e7eb;
+    border-radius:14px;
+    overflow:hidden;
+    position:relative;
+  }
+  .crm-colhead{
+    height:40px;
+    display:flex; align-items:center; justify-content:space-between;
+    gap:8px;
+    padding:0 10px;
+    background:#f9fafb;
+    border-bottom:1px solid #eef2f7;
+    font-weight:800;
+  }
+  .crm-colbody{
+    position:relative;
+    height: {{ grid_height_px }}px;
+    background:
+      linear-gradient(to bottom, rgba(0,0,0,0.04) 1px, transparent 1px);
+    background-size: 100% 72px;
+    user-select:none;
+  }
+
+  /* ✅ 10-минутные кликабельные полоски */
+  .crm-slot{
+    position:absolute;
+    left:0; right:0;
+    height: {{ slot_height_px }}px;
+    cursor:pointer;
+    background: transparent;
+    z-index: 1; /* ниже карточек */
+  }
+  .crm-slot:hover{
+    background: rgba(233,30,99,0.08);
+  }
+
+  .crm-block{
+    position:absolute;
+    left:10px; right:10px;
+    border-radius:10px;
+    padding:8px 10px;
+    border:1px solid rgba(0,0,0,0.08);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+    text-decoration:none;
+    color:#111;
+    overflow:hidden;
+    z-index: 2; /* выше слотов */
+  }
+  .crm-block:hover{filter:brightness(0.98);}
+  .crm-block .t1{font-weight:900; font-size:13px; margin-bottom:4px;}
+  .crm-block .t2{font-size:12px; color:#374151;}
+  .crm-block .t3{font-size:12px; color:#6b7280;}
+
+  .c1{background:#ecfeff;}
+  .c2{background:#eef2ff;}
+  .c3{background:#fef3c7;}
+  .c4{background:#dcfce7;}
+
+  /* "+ menu" */
+  .plus-menu{
+    position:fixed;
+    z-index:9999;
+    min-width:220px;
+    background:#fff;
+    border:1px solid rgba(0,0,0,0.12);
+    border-radius:14px;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.18);
+    padding:10px;
+    display:none;
+  }
+  .plus-menu.open{display:block;}
+  .plus-item{
+    display:block;
+    padding:10px 12px;
+    border-radius:12px;
+    border:1px solid rgba(233,30,99,0.35);
+    color:#e91e63;
+    font-weight:900;
+    text-decoration:none;
+    text-align:center;
+    margin:8px 0;
+  }
+  .plus-item:hover{background:rgba(233,30,99,0.06);}
+
+  /* Drag ghost */
+  .ghost{
+    position:absolute;
+    left:10px; right:10px;
+    border-radius:10px;
+    padding:8px 10px;
+    border:1px dashed rgba(0,0,0,0.25);
+    background:rgba(0,0,0,0.03);
+    pointer-events:none;
+    opacity:0.85;
+  }
+
+  /* ====== UX upgrade ====== */
+:root{
+  --slot: {{ slot_height_px }}px; /* 10 минут */
+  --hour: calc(var(--slot) * 6);  /* 60 минут */
+}
+
+.crm-topbar{
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: #0b0f16;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding: 12px 16px;
+  margin: -16px -16px 12px -16px;
+}
+
+.crm-title{font-size:20px; font-weight:900; color:#fff;}
+.crm-sub{color:rgba(255,255,255,0.65); font-size:13px; font-weight:700;}
+
+.crm-btn{
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color:#fff;
+}
+.crm-btn:hover{background: rgba(255,255,255,0.1);}
+.crm-btn.primary{background:#ff2d7d; border-color:#ff2d7d;}
+.crm-btn.primary:hover{filter:brightness(0.95);}
+
+.crm-grid{gap:16px;}
+
+/* Липкая колонка времени */
+.crm-hours{
+  position: sticky;
+  left: 0;
+  z-index: 30;
+  background: #0b0f16;
+  border-radius: 14px;
+  padding: 40px 8px 0 8px;
+}
+.crm-hour{
+  color: rgba(255,255,255,0.75);
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+/* Липкая шапка колонки */
+.crm-colhead{
+  
+  top: 72px; /* высота топбара + отступ */
+  z-index: 25;
+  background: #0f1522;
+  color: #fff;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.crm-col{
+  border: 1px solid rgba(255,255,255,0.10);
+  background: #0b0f16;
+}
+.crm-colbody{
+  background:
+    /* 10 минут */
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255,255,255,0.05) 0px,
+      rgba(255,255,255,0.05) 1px,
+      transparent 1px,
+      transparent var(--slot)
+    ),
+    /* 60 минут (чуть ярче) */
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255,255,255,0.10) 0px,
+      rgba(255,255,255,0.10) 1.5px,
+      transparent 1.5px,
+      transparent var(--hour)
+    );
+}
+
+/* Слот клика */
+.crm-slot{
+  position:absolute;
+  left:0; right:0;
+  height: var(--slot);
+  cursor:pointer;
+  background: transparent;
+  z-index: 1;
+}
+.crm-slot:hover{
+  background: rgba(255,45,125,0.10);
+}
+
+/* Карточки занятий */
+.crm-block{
+  z-index: 2;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: 0 10px 26px rgba(0,0,0,0.35);
+  padding: 10px 12px;
+}
+.crm-block .t1{font-size:14px; font-weight:900;}
+.crm-block .t2{font-size:12px; color: rgba(255,255,255,0.80);}
+.crm-block .t3{display:none;} /* локацию скрываем — она и так колонка */
+
+/* Цвета по типу */
+.crm-block.kind-personal{background: rgba(0, 245, 255, 0.20);}
+.crm-block.kind-group{background: rgba(255, 225, 0, 0.22);}
+.crm-block.kind-rent{background: rgba(160, 120, 255, 0.22);}
+
+/* Линия "сейчас" */
+.now-line{
+  position:absolute;
+  left:0; right:0;
+  height:2px;
+  background: #ff2d7d;
+  box-shadow: 0 0 0 2px rgba(255,45,125,0.18);
+  z-index: 3;
+  pointer-events:none;
+}
+.now-badge{
+  position:absolute;
+  right: 8px;
+  top: -10px;
+  background:#ff2d7d;
+  color:#fff;
+  font-weight:900;
+  font-size:11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+/* Tooltip */
+.tip{
+  position: fixed;
+  z-index: 99999;
+  background: rgba(10,15,22,0.95);
+  border: 1px solid rgba(255,255,255,0.12);
+  color:#fff;
+  padding: 8px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  pointer-events:none;
+  display:none;
+  max-width: 320px;
+}
+.tip b{font-weight: 900;}
+
+
+
+
+/* ===== Pink theme (readable) ===== */
+:root{
+  --pink: #ff2d7d;
+  --pink2:#ff5aa0;
+  --bg: #fff5fa;
+  --card: #ffffff;
+  --line: rgba(0,0,0,0.06);
+  --text: #111827;
+  --muted:#6b7280;
+}
+
+/* фон страницы */
+.crm-wrap{
+  background: var(--bg);
+  border-radius: 16px;
+}
+
+/* верхняя панель */
+.crm-topbar{
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  background: linear-gradient(90deg, var(--pink), var(--pink2));
+  border-radius: 16px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  box-shadow: 0 10px 24px rgba(255,45,125,0.18);
+}
+
+.crm-title{ color:#fff; font-size:20px; font-weight:900; }
+.crm-left label{ color: rgba(255,255,255,0.9); font-weight:800; }
+.crm-input{
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.35);
+  background: rgba(255,255,255,0.20);
+  color:#fff;
+}
+.crm-input::placeholder{color:rgba(255,255,255,0.7);}
+
+.crm-btn{
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.35);
+  background: rgba(255,255,255,0.18);
+  color:#fff;
+  font-weight:900;
+}
+.crm-btn:hover{ background: rgba(255,255,255,0.26); }
+.crm-btn.primary{
+  background:#fff;
+  color: var(--pink);
+  border-color:#fff;
+}
+.crm-btn.primary:hover{ filter:brightness(0.97); }
+
+/* колонка времени */
+.crm-hours{
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  position: sticky;
+  left: 0;
+  z-index: 30;
+}
+.crm-hour{
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+}
+
+/* колонки */
+.crm-col{
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.crm-colhead{
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  
+  top: 70px; /* если topbar другой высоты — подвинь */
+  z-index: 25;
+}
+.crm-colhead div{ color: var(--text); }
+
+/* сетка: 10 мин тонко, 60 мин чуть жирнее */
+.crm-colbody{
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0.05) 0px,
+      rgba(0,0,0,0.05) 1px,
+      transparent 1px,
+      transparent {{ slot_height_px }}px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0.08) 0px,
+      rgba(0,0,0,0.08) 2px,
+      transparent 2px,
+      transparent calc({{ slot_height_px }}px * 6)
+    );
+}
+
+/* hover слота */
+.crm-slot:hover{
+  background: rgba(255,45,125,0.08);
+}
+
+/* карточки занятий — делаем аккуратнее */
+.crm-block{
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.10);
+}
+.crm-block .t1{ color: var(--text); font-size:14px; font-weight:900; }
+.crm-block .t2{ color: #374151; font-size:12px; font-weight:700; }
+.crm-block .t3{ display:none; }
+
+/* линия "сейчас" (если есть) */
+.now-line{
+  background: var(--pink);
+  box-shadow: 0 0 0 2px rgba(255,45,125,0.18);
+}
+.now-badge{
+  background: var(--pink);
+}
+
+/* tooltip */
+.tip{
+  background: #111827;
+  border: 1px solid rgba(255,255,255,0.12);
+  color:#fff;
+  border-radius: 12px;
+}
+
+
+
+
+
+
+
+
+.drag-handle{
+  position:absolute;
+  right:10px;
+  top:8px;
+  width:26px;
+  height:26px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:10px;
+  background: rgba(0,0,0,0.10);
+  color:#111;
+  font-weight:900;
+  cursor: grab;
+  user-select:none;
+}
+.crm-block.kind-personal .drag-handle,
+.crm-block.kind-group .drag-handle,
+.crm-block.kind-rent .drag-handle{
+  background: rgba(255,255,255,0.55);
+}
+.drag-handle:active{ cursor: grabbing; }
+
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="crm-wrap">
+  <div class="crm-topbar">
+    <div class="crm-left">
+      <div class="crm-title">Планирование (график)</div>
+
+      <form method="get" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <label>Дата:</label>
+        <input class="crm-input" type="date" name="day" value="{{ day|date:'Y-m-d' }}">
+
+        <label>С:</label>
+        <input class="crm-input" type="number" min="0" max="23" name="from" value="{{ grid_start_h }}" style="width:80px;">
+
+        <label>До:</label>
+        <input class="crm-input" type="number" min="0" max="23" name="to" value="{{ grid_end_h }}" style="width:80px;">
+
+        <button class="crm-btn" type="submit">Показать</button>
+      </form>
+    </div>
+
+    <a class="crm-btn primary" href="{{ admin_add_url }}">＋ Добавить (обычно)</a>
+    <form method="post" action="{% url 'crm_planning_repeat_week' %}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+  {% csrf_token %}
+  <span style="font-weight:900; color:#fff;">Повторить неделю:</span>
+  <input class="crm-input" type="date" name="src_day" value="{{ day|date:'Y-m-d' }}" title="Неделя-источник">
+  <span style="color:#fff; font-weight:900;">→</span>
+  <input class="crm-input" type="date" name="dst_day" value="{{ day|date:'Y-m-d' }}" title="Неделя-назначение">
+  <input class="crm-input" type="number" name="shift_min" value="0" step="10" style="width:90px;" title="Сдвиг минут (кратно 10)">
+  <button class="crm-btn primary" type="submit">Повторить</button>
+</form>
+  </div>
+
+
+  
+
+
+
+  <div class="crm-grid">
+    <div class="crm-hours">
+      {% for h in hours %}
+        <div class="crm-hour">{{ h|date:"H:i" }}</div>
+      {% endfor %}
+    </div>
+
+    <div class="crm-board" id="crmBoard">
+      {% for loc, blocks in columns.items %}
+        <div class="crm-col">
+          <div class="crm-colhead">
+            <div>{{ loc }}</div>
+            <a class="crm-btn" href="#" data-quick-add data-loc="{{ loc|urlencode }}">＋</a>
+          </div>
+
+          <div class="crm-colbody" data-loc="{{ loc }}">
+            {# ✅ Слоты 10 минут #}
+            {% for s in slots %}
+              <div class="crm-slot"
+                   style="top: {{ s.top_px }}px;"
+                   data-start="{{ s.start }}"></div>
+            {% endfor %}
+
+            {% for b in blocks %}
+              {% with cls=forloop.counter|add:0 %}
+              <a class="crm-block
+                {% if "Персон" in b.title %}kind-personal{% elif "Аренда" in b.title %}kind-rent{% else %}kind-group{% endif %}"
+                href="{{ b.edit_url }}"
+                data-title="{{ b.title }}"
+                data-trainer="{{ b.trainer }}"
+                data-time="{{ b.hhmm }}–{{ b.end_hhmm }}"
+                data-session-id="{{ b.id }}"
+                data-duration="{{ b.duration_min }}"
+                style="top: {{ b.top_px }}px; height: {{ b.height_px }}px;">
+                <span class="drag-handle" title="Перетащить">⠿</span>
+                <div class="t1">{{ b.hhmm }}–{{ b.end_hhmm }} • {{ b.title }}</div>
+                <div class="t2">{% if b.trainer %}{{ b.trainer }}{% else %}—{% endif %}</div>
+
+              </a>
+              {% endwith %}
+            {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- меню быстрого добавления -->
+<div class="plus-menu" id="plusMenu">
+  <a class="plus-item" href="#" data-kind="rent">Аренда</a>
+  <a class="plus-item" href="#" data-kind="personal">Персональное занятие</a>
+  <a class="plus-item" href="#" data-kind="group">Групповое занятие</a>
+</div>
+
+<script>
+(function(){
+  // px_per_min приходит с бэка. unlocalize нужен на случай "1,2" (RU)
+  let pxPerMin = parseFloat("{{ px_per_min|unlocalize }}");
+  if (!Number.isFinite(pxPerMin) || pxPerMin <= 0) pxPerMin = 1.2;
+
+  const dayIso = "{{ day|date:'Y-m-d' }}";
+  const gridStartH = Number("{{ grid_start_h }}");
+  const gridEndH = Number("{{ grid_end_h }}");
+  const addBase = "{{ admin_add_url }}";
+  const moveUrl = "{{ move_url }}";
+
+  const menu = document.getElementById("plusMenu");
+  let menuContext = { loc: "", start: "12:00" };
+  let lastMenuOpenAt = 0;
+
+  function getCookie(name) {
+    const v = `; ${document.cookie}`;
+    const parts = v.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return "";
+  }
+
+  function closeMenu(){ menu.classList.remove("open"); }
+  function openMenuAt(x, y, ctx){
+    menuContext = ctx;
+    menu.style.left = Math.max(8, x - 10) + "px";
+    menu.style.top = Math.max(8, y - 10) + "px";
+    menu.classList.add("open");
+    lastMenuOpenAt = Date.now();
+  }
+
+  function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+  function roundTo10(mins){ return Math.round(mins/10)*10; }
+
+  function minsToHHMM(totalMins){
+    totalMins = clamp(totalMins, 0, 24*60-1);
+    const hh = String(Math.floor(totalMins/60)).padStart(2,"0");
+    const mm = String(totalMins%60).padStart(2,"0");
+    return `${hh}:${mm}`;
+  }
+
+  function next10Now(){
+    const now = new Date();
+    let mins = now.getHours()*60 + now.getMinutes();
+    mins = Math.ceil(mins/10)*10;
+    const minVis = gridStartH*60;
+    const maxVis = (gridEndH*60) - 10;
+    mins = clamp(mins, minVis, maxVis);
+    return minsToHHMM(mins);
+  }
+
+  // "+" в заголовке зала → меню
+  document.addEventListener("click", (e)=>{
+    const btn = e.target.closest("[data-quick-add]");
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const loc = decodeURIComponent(btn.getAttribute("data-loc") || "");
+    openMenuAt(e.clientX, e.clientY, { loc, start: next10Now() });
+  });
+
+  // ✅ Клик по 10-минутному слоту: время берём из data-start
+  document.addEventListener("click", (e) => {
+    const slot = e.target.closest(".crm-slot");
+    if (!slot) return;
+    if (e.target.closest(".crm-block")) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const col = slot.closest(".crm-colbody");
+    if (!col) return;
+
+    const loc = col.getAttribute("data-loc") || "";
+    const start = slot.getAttribute("data-start") || "12:00";
+    openMenuAt(e.clientX, e.clientY, { loc, start });
+  }, true);
+
+  // выбор типа → переход в admin add с параметрами
+  menu.querySelectorAll("[data-kind]").forEach(a=>{
+    a.addEventListener("click", (e)=>{
+      e.preventDefault();
+      const kind = a.getAttribute("data-kind");
+
+      const url = new URL(window.location.origin + addBase);
+      url.searchParams.set("day", dayIso);
+      url.searchParams.set("loc", menuContext.loc);
+      url.searchParams.set("start", menuContext.start);
+      url.searchParams.set("kind", kind);
+
+      window.location.href = url.toString();
+    });
+  });
+
+  document.addEventListener("keydown", (e)=>{ if (e.key === "Escape") closeMenu(); });
+  document.addEventListener("click", (e)=>{
+    if (Date.now() - lastMenuOpenAt < 80) return;
+    if (!e.target.closest("#plusMenu") && !e.target.closest("[data-quick-add]")) closeMenu();
+  });
+
+  // --------------------
+// Drag & Drop blocks (click != drag)
+// --------------------
+let drag = null;
+let ghost = null;
+
+const DRAG_THRESHOLD_PX = 7;
+const COLHEAD_H = 44; // если ты в CSS зафиксировал 44px (как я писал)
+
+function createGhost(colBody, heightPx){
+  const g = document.createElement("div");
+  g.className = "ghost";
+  g.style.height = heightPx + "px";
+  colBody.appendChild(g);
+  return g;
+}
+
+function postMove(sessionId, day, start, loc){
+  const csrftoken = getCookie("csrftoken");
+  return fetch(moveUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type":"application/json",
+      "X-CSRFToken": csrftoken,
+    },
+    body: JSON.stringify({ session_id: sessionId, day, start, loc })
+  }).then(r=>r.json());
+}
+
+function yToGridMinutes(colBody, clientY){
+  const rect = colBody.getBoundingClientRect();
+  let y = clientY - rect.top - COLHEAD_H;     // ✅ учитываем шапку
+  y = clamp(y, 0, rect.height - COLHEAD_H);   // ✅ ограничиваем внутри сетки
+
+  let minsFromGrid = roundTo10(y / pxPerMin);
+  return minsFromGrid;
+}
+
+function onPointerDown(e){
+  const a = e.target.closest(".crm-block");
+  if (!a) return;
+
+  // ЛКМ только
+  if (e.button !== undefined && e.button !== 0) return;
+
+  // ✅ НЕ preventDefault здесь — иначе клик по ссылке не сработает
+  const colBody = a.closest(".crm-colbody");
+  const sessionId = a.getAttribute("data-session-id");
+  const dur = Number(a.getAttribute("data-duration") || "50");
+  const heightPx = Math.max(20, dur * pxPerMin);
+
+  drag = {
+    a,
+    colBody,
+    sessionId,
+    dur,
+    heightPx,
+    startX: e.clientX,
+    startY: e.clientY,
+    started: false,
+    href: a.getAttribute("href") || "",
+  };
+
+  document.addEventListener("pointermove", onPointerMove, true);
+  document.addEventListener("pointerup", onPointerUp, true);
+}
+
+function onPointerMove(e){
+  if (!drag) return;
+
+  const dx = e.clientX - drag.startX;
+  const dy = e.clientY - drag.startY;
+  const dist = Math.hypot(dx, dy);
+
+  // ✅ пока не прошли порог — это “клик”, ничего не делаем
+  if (!drag.started && dist < DRAG_THRESHOLD_PX) return;
+
+  // ✅ стартуем drag один раз
+  if (!drag.started) {
+    drag.started = true;
+    e.preventDefault();
+    e.stopPropagation();
+
+    ghost = createGhost(drag.colBody, drag.heightPx);
+  }
+
+  // двигаем ghost
+  const minsFromGrid = yToGridMinutes(drag.colBody, e.clientY);
+  const maxMins = (gridEndH - gridStartH) * 60 - drag.dur;
+  const clampedMins = clamp(minsFromGrid, 0, maxMins);
+
+  ghost.style.top = (clampedMins * pxPerMin + COLHEAD_H) + "px"; // ✅ + шапка
+}
+
+async function onPointerUp(e){
+  document.removeEventListener("pointermove", onPointerMove, true);
+  document.removeEventListener("pointerup", onPointerUp, true);
+
+  if (!drag) return;
+
+  // ✅ если drag так и не начался — это обычный клик → идём по ссылке
+  if (!drag.started) {
+    drag = null;
+    return; // браузер сам обработает клик по <a>
+  }
+
+  // ✅ drag был — значит переносим
+  e.preventDefault();
+  e.stopPropagation();
+
+  try{
+    const minsFromGrid = yToGridMinutes(drag.colBody, e.clientY);
+    const maxMins = (gridEndH - gridStartH) * 60 - drag.dur;
+    const clampedMins = clamp(minsFromGrid, 0, maxMins);
+
+    const start = minsToHHMM(gridStartH*60 + clampedMins);
+    const loc = drag.colBody.getAttribute("data-loc") || "";
+
+    const resp = await postMove(drag.sessionId, dayIso, start, loc);
+    if (resp && resp.ok){
+      window.location.reload();
+    } else {
+      alert("Не удалось переместить: " + (resp && resp.error ? resp.error : "unknown"));
+    }
+  } finally {
+    if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
+    ghost = null;
+    drag = null;
+  }
+}
+
+document.addEventListener("pointerdown", onPointerDown, true);
+
+
+  function postMove(sessionId, day, start, loc){
+    const csrftoken = getCookie("csrftoken");
+    return fetch(moveUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type":"application/json",
+        "X-CSRFToken": csrftoken,
+      },
+      body: JSON.stringify({ session_id: sessionId, day, start, loc })
+    }).then(r=>r.json());
+  }
+
+  function onPointerDown(e){
+    // ✅ только если нажали на ручку
+    const handle = e.target.closest(".drag-handle");
+    if (!handle) return;
+
+    const a = handle.closest(".crm-block");
+    if (!a) return;
+
+    if (e.button !== undefined && e.button !== 0) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const colBody = a.closest(".crm-colbody");
+    const sessionId = a.getAttribute("data-session-id");
+    const dur = Number(a.getAttribute("data-duration") || "50");
+    const heightPx = Math.max(20, dur * pxPerMin);
+
+    dragging = { a, colBody, sessionId, dur, heightPx };
+    ghost = createGhost(colBody, heightPx);
+
+    onPointerMove(e);
+    document.addEventListener("pointermove", onPointerMove, true);
+    document.addEventListener("pointerup", onPointerUp, true);
+  }
+
+  function onPointerMove(e){
+    if (!dragging || !ghost) return;
+    const colBody = dragging.colBody;
+
+    const rect = colBody.getBoundingClientRect();
+    let y = e.clientY - rect.top;
+    y = clamp(y, 0, rect.height);
+
+    const minsFromGrid = roundTo10(y / pxPerMin);
+    const maxMins = (gridEndH - gridStartH) * 60 - dragging.dur;
+    const clampedMins = clamp(minsFromGrid, 0, maxMins);
+    ghost.style.top = (clampedMins * pxPerMin) + "px";
+  }
+
+  async function onPointerUp(e){
+    document.removeEventListener("pointermove", onPointerMove, true);
+    document.removeEventListener("pointerup", onPointerUp, true);
+
+    try{
+      if (!dragging || !ghost) return;
+
+      const colBody = dragging.colBody;
+      const rect = colBody.getBoundingClientRect();
+      let y = e.clientY - rect.top;
+      y = clamp(y, 0, rect.height);
+
+      let minsFromGrid = roundTo10(y / pxPerMin);
+      const maxMins = (gridEndH - gridStartH) * 60 - dragging.dur;
+      minsFromGrid = clamp(minsFromGrid, 0, maxMins);
+
+      const start = minsToHHMM(gridStartH*60 + minsFromGrid);
+      const loc = colBody.getAttribute("data-loc") || "";
+
+      const resp = await postMove(dragging.sessionId, dayIso, start, loc);
+      if (resp && resp.ok){
+        window.location.reload();
+      }else{
+        alert("Не удалось переместить: " + (resp && resp.error ? resp.error : "unknown"));
+      }
+    } finally {
+      if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
+      ghost = null;
+      dragging = null;
+    }
+  }
+
+  document.addEventListener("pointerdown", onPointerDown, true);
+
+  // --------------------
+  // Navigation hotkeys: [ and ]
+  // --------------------
+  function setDay(delta){
+    const url = new URL(window.location.href);
+    const cur = url.searchParams.get("day") || "{{ day|date:'Y-m-d' }}";
+    const d = new Date(cur + "T00:00:00");
+    d.setDate(d.getDate() + delta);
+    const iso = d.toISOString().slice(0,10);
+    url.searchParams.set("day", iso);
+    window.location.href = url.toString();
+  }
+
+  document.addEventListener("keydown", (e)=>{
+    if (e.key === "[") setDay(-1);
+    if (e.key === "]") setDay(+1);
+  });
+
+  // --------------------
+  // Tooltip (blocks + slots)
+  // --------------------
+  const slotStepMin = Number("{{ slot_step_min|default:10 }}") || 10;
+
+  function addMins(hhmm, add){
+    const [h,m] = hhmm.split(":").map(Number);
+    let t = h*60 + m + add;
+    t = Math.max(0, Math.min(24*60, t));
+    const hh = String(Math.floor(t/60)).padStart(2,"0");
+    const mm = String(t%60).padStart(2,"0");
+    return `${hh}:${mm}`;
+  }
+
+  let tip = document.querySelector(".tip");
+  if (!tip) {
+    tip = document.createElement("div");
+    tip.className = "tip";
+    document.body.appendChild(tip);
+  }
+
+  function showTip(x,y,html){
+    tip.innerHTML = html;
+    tip.style.left = (x + 12) + "px";
+    tip.style.top = (y + 12) + "px";
+    tip.style.display = "block";
+  }
+  function hideTip(){ tip.style.display = "none"; }
+
+  document.addEventListener("mousemove", (e)=>{
+    const slot = e.target.closest(".crm-slot");
+    if (slot) {
+      const start = slot.getAttribute("data-start");
+      if (start) {
+        const end = addMins(start, slotStepMin);
+        const col = slot.closest(".crm-colbody");
+        const loc = col ? (col.getAttribute("data-loc") || "") : "";
+        showTip(e.clientX, e.clientY, `<b>${start}–${end}</b><br>${loc}`);
+        return;
+      }
+    }
+
+    const b = e.target.closest(".crm-block");
+    if (!b) return hideTip();
+
+    const t = b.getAttribute("data-time") || "";
+    const title = b.getAttribute("data-title") || "";
+    const tr = b.getAttribute("data-trainer") || "—";
+    showTip(e.clientX, e.clientY, `<b>${t}</b><br>${title}<br>Тренер: ${tr}`);
+  }, true);
+
+  document.addEventListener("mouseleave", hideTip, true);
+  document.addEventListener("scroll", hideTip, true);
+
+  // --------------------
+  // NOW line (today only)
+  // --------------------
+  (function(){
+    const todayIso = new Date().toISOString().slice(0,10);
+    if (dayIso !== todayIso) return;
+
+    const now = new Date();
+    const mins = now.getHours()*60 + now.getMinutes();
+
+    const minVis = gridStartH*60;
+    const maxVis = gridEndH*60;
+    if (mins < minVis || mins > maxVis) return;
+
+    const y = (mins - minVis) * pxPerMin;
+
+    document.querySelectorAll(".crm-colbody").forEach(col=>{
+      const line = document.createElement("div");
+      line.className = "now-line";
+      line.style.top = y + "px";
+      line.innerHTML = `<div class="now-badge">СЕЙЧАС</div>`;
+      col.appendChild(line);
+    });
+  })();
+
+})();
+</script>
+
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Регистрация — WOOM FIT{% endblock %}
+{% block topbar_left %}
+  <a class="btn btn--ghost" style="padding:8px 10px; border-radius:14px;" href="{% url 'login' %}">←</a>
+{% endblock %}
+{% block content %}
+  <h2 class="section-title">Регистрация</h2>
+
+  <form method="post" class="card">
+    {% csrf_token %}
+    <div class="list">
+      <div>
+        <label class="muted" style="font-weight:900;">Логин</label>
+        {{ form.username }}
+      </div>
+      <div>
+        <label class="muted" style="font-weight:900;">Имя</label>
+        {{ form.first_name }}
+      </div>
+      <div>
+        <label class="muted" style="font-weight:900;">Фамилия</label>
+        {{ form.last_name }}
+      </div>
+      <div>
+        <label class="muted" style="font-weight:900;">Телефон</label>
+        {{ form.phone }}
+      </div>
+      <div>
+        <label class="muted" style="font-weight:900;">Пароль</label>
+        {{ form.password1 }}
+      </div>
+      <div>
+        <label class="muted" style="font-weight:900;">Повтор пароля</label>
+        {{ form.password2 }}
+      </div>
+
+      {% if form.errors %}
+        <div class="muted" style="font-weight:900; color:#973e3e;">
+          Проверьте поля — есть ошибки.
+        </div>
+      {% endif %}
+    </div>
+
+    <div style="margin-top:14px;">
+      <button class="btn btn--primary btn--full" type="submit">Создать аккаунт</button>
+    </div>
+  </form>
+{% endblock %}

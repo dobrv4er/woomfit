@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Личные данные — WOOM FIT{% endblock %}
+{% block topbar_left %}
+  <a class="btn btn--ghost" style="padding:8px 10px; border-radius:14px;" href="{% url 'accounts:profile' %}">←</a>
+{% endblock %}
+{% block content %}
+  <div class="card">
+    <div style="font-weight:900; margin-bottom:10px;">Клуб</div>
+    <div class="muted">{{ request.user.club }}</div>
+    <hr style="margin:14px 0;">
+    <div style="font-weight:900; margin-bottom:10px;">Карта</div>
+    <div class="muted">{% if request.user.club_card %}{{ request.user.club_card }}{% else %}Нет клубной карты{% endif %}</div>
+  </div>
+
+  <h2 class="section-title">О вас</h2>
+
+  <form method="post" class="card">
+    {% csrf_token %}
+    <div class="list">
+      <div><label class="muted" style="font-weight:900;">Имя</label>{{ form.first_name }}</div>
+      <div><label class="muted" style="font-weight:900;">Фамилия</label>{{ form.last_name }}</div>
+      <div><label class="muted" style="font-weight:900;">Дата рождения</label>{{ form.birth_date }}</div>
+      <div><label class="muted" style="font-weight:900;">Телефон</label>{{ form.phone }}</div>
+    </div>
+    <div style="margin-top:14px;">
+      <button class="btn btn--primary btn--full" type="submit">Сохранить данные</button>
+    </div>
+  </form>
+{% endblock %}

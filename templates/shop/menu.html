@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Магазин — WOOM FIT{% endblock %}
+
+{% block topbar_right %}
+  <a class="btn btn--ghost" style="padding:8px 10px; border-radius:14px;" href="{% url 'shop:cart' %}">
+    🛒{% if cart.count %} ({{ cart.count }}){% endif %}
+  </a>
+{% endblock %}
+
+{% block content %}
+<style>
+  .shop-wrap{padding-bottom:24px;}
+  .shop-hero{
+    border-radius:24px;
+    background:#fff;
+    border:1px solid rgba(0,0,0,0.06);
+    box-shadow:0 14px 34px rgba(15,23,42,0.06);
+    padding:16px;
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:12px;
+  }
+  .shop-hero__t{font-weight:900;font-size:20px;letter-spacing:-0.02em;}
+  .shop-hero__s{margin-top:6px;color:var(--muted);font-weight:800;line-height:1.25;max-width:560px;}
+  .shop-hero__pill{
+    flex:0 0 auto;
+    padding:10px 12px;
+    border-radius:999px;
+    background:rgba(233,76,122,0.10);
+    border:1px solid rgba(233,76,122,0.16);
+    color:#c02658;
+    font-weight:900;
+    white-space:nowrap;
+  }
+
+  .sec-title{
+    margin:14px 0 10px;
+    font-weight:900;
+    font-size:13px;
+    color:#64748b;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+  }
+
+  .sec-grid{
+    display:grid;
+    gap:12px;
+  }
+
+  .sec-card{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    background:#fff;
+    border:1px solid rgba(0,0,0,0.06);
+    border-radius:22px;
+    padding:14px;
+    box-shadow:0 12px 28px rgba(15,23,42,0.06);
+    text-decoration:none;
+    color:inherit;
+  }
+
+  .sec-left{display:flex;align-items:center;gap:12px;min-width:0;}
+  .sec-emoji{
+    width:44px;height:44px;border-radius:16px;
+    display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg, rgba(233,76,122,0.16), rgba(255,109,155,0.10));
+    border:1px solid rgba(233,76,122,0.18);
+    font-size:20px;
+  }
+  .sec-name{font-weight:900;font-size:16px;line-height:1.1;}
+  .sec-sub{margin-top:4px;color:var(--muted);font-weight:800;font-size:12.5px;line-height:1.2;}
+  .sec-right{color:#94a3b8;font-weight:900;font-size:20px;}
+
+  .sticky-mini{
+    margin-top:14px;
+    border-radius:20px;
+    background:#fff;
+    border:1px solid rgba(0,0,0,0.06);
+    box-shadow:0 12px 28px rgba(15,23,42,0.06);
+    padding:12px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+  }
+  .sticky-mini__t{font-weight:900;}
+  .sticky-mini__s{color:var(--muted);font-weight:800;font-size:12.5px;}
+</style>
+
+<div class="shop-wrap">
+  <div class="shop-hero">
+    <div>
+      <div class="shop-hero__t">Магазин</div>
+      <div class="shop-hero__s">Абонементы и услуги. Добавляй в корзину или покупай в один клик.</div>
+    </div>
+    <div class="shop-hero__pill">WOOM FIT</div>
+  </div>
+
+  <div class="sec-title">Разделы</div>
+
+  <div class="sec-grid">
+    {% for c in cards %}
+      <a class="sec-card" href="{% url 'shop:section' c.key %}">
+        <div class="sec-left">
+          <div class="sec-emoji">{{ c.emoji }}</div>
+          <div style="min-width:0;">
+            <div class="sec-name">{{ c.title }}</div>
+            <div class="sec-sub">{{ c.sub }}</div>
+          </div>
+        </div>
+        <div class="sec-right">›</div>
+      </a>
+    {% endfor %}
+  </div>
+
+  {% if cart.count %}
+    <div class="sticky-mini">
+      <div>
+        <div class="sticky-mini__t">Корзина: {{ cart.count }} шт.</div>
+        <div class="sticky-mini__s">Итого: {{ cart.total_rub }} ₽</div>
+      </div>
+      <a class="btn btn--primary" style="border-radius:16px; padding:12px 14px;" href="{% url 'shop:cart' %}">
+        Открыть
+      </a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

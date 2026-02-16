@@ -1,0 +1,29 @@
+{% if sessions %}
+  <div class="list">
+    {% for s in sessions %}
+      {# поддержка двух форматов: s = Session ИЛИ s = {"obj": Session, ...} #}
+      {% with sess=s.obj|default:s %}
+        <a class="item"
+           id="session-{{ sess.id }}"
+           href="{% url 'schedule:detail' sess.id %}"
+           style="align-items:flex-start; text-decoration:none; color:inherit;">
+          <div class="item__left" style="align-items:flex-start;">
+            <div style="min-width:70px; text-align:left;">
+              <div style="font-weight:900; font-size:18px;">{{ sess.start_at|date:"H:i" }}</div>
+              <div class="muted" style="font-weight:800; font-size:13px;">{{ sess.duration_min }} мин</div>
+            </div>
+            <div>
+              <div class="item__title">{{ sess.title }}</div>
+              <div class="item__subtitle">{{ sess.trainer.name }}</div>
+            </div>
+          </div>
+          <div class="item__chev">›</div>
+        </a>
+      {% endwith %}
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card" style="text-align:center;">
+    <div class="muted" style="font-weight:900;">На этот день занятий нет</div>
+  </div>
+{% endif %}

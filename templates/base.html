@@ -1,0 +1,57 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}WOOM FIT{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar__left">{% block topbar_left %}{% endblock %}</div>
+    <a class="topbar__brand" href="{% url 'core:home' %}" aria-label="WOOM FIT"><span class="brand__dot">⚡</span></a>
+    <div class="topbar__right">{% block topbar_right %}{% endblock %}</div>
+  </header>
+
+  <nav class="desknav">
+    <a class="desknav__item {% if request.path == '/' %}is-active{% endif %}" href="{% url 'core:home' %}">Главная</a>
+    <a class="desknav__item {% if request.path|slice:':10' == '/schedule/' %}is-active{% endif %}" href="{% url 'schedule:list' %}">Расписание</a>
+    <a class="desknav__item {% if request.path|slice:':6' == '/shop/' %}is-active{% endif %}" href="{% url 'shop:menu' %}">Магазин{% if cart.count %} ({{ cart.count }}){% endif %}</a>
+    <a class="desknav__item {% if request.path|slice:':9' == '/profile/' %}is-active{% endif %}" href="{% url 'accounts:profile' %}">Профиль</a>
+  </nav>
+
+  <main class="page">
+    {% if messages %}
+      <div class="flash">
+        {% for m in messages %}
+          <div class="flash__item">{{ m }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+
+  <nav class="tabbar" aria-label="Нижнее меню">
+    <a class="tabbar__item {% if request.path == '/' %}is-active{% endif %}" href="{% url 'core:home' %}">
+      <span class="tabbar__icon">⌂</span>
+      <span class="tabbar__label">Главная</span>
+    </a>
+    <a class="tabbar__item {% if request.path|slice:':10' == '/schedule/' %}is-active{% endif %}" href="{% url 'schedule:list' %}">
+      <span class="tabbar__icon">🕒</span>
+      <span class="tabbar__label">Расписание</span>
+    </a>
+    <a class="tabbar__item {% if request.path|slice:':6' == '/shop/' %}is-active{% endif %}" href="{% url 'shop:menu' %}">
+      <span class="tabbar__icon">🛍</span>
+      <span class="tabbar__label">Магазин</span>
+      {% if cart.count %}
+        <span class="tabbar__badge">{{ cart.count }}</span>
+      {% endif %}
+    </a>
+    <a class="tabbar__item {% if request.path|slice:':9' == '/profile/' %}is-active{% endif %}" href="{% url 'accounts:profile' %}">
+      <span class="tabbar__icon">👤</span>
+      <span class="tabbar__label">Профиль</span>
+    </a>
+  </nav>
+</body>
+</html>

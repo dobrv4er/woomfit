@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Тренеры — WOOM FIT{% endblock %}
+{% block topbar_left %}
+  <a class="btn btn--ghost" style="padding:8px 10px; border-radius:14px;" href="javascript:history.back()">←</a>
+{% endblock %}
+{% block content %}
+  <h2 class="section-title">Тренеры</h2>
+  <div class="card">
+    <div class="muted" style="font-weight:900;">Список всех тренеров нашего клуба</div>
+  </div>
+
+  <div style="height:12px;"></div>
+
+  <div class="list">
+    {% for t in trainers %}
+      <div class="item">
+        <div class="item__left">
+          <div class="item__icon" style="background:#e0e7ff;color:#4338ca;">🎯</div>
+          <div>
+            <div class="item__title">{{ t.name }}</div>
+            <div class="item__subtitle">Тренер</div>
+          </div>
+        </div>
+      </div>
+    {% empty %}
+      <div class="card" style="text-align:center;">
+        <div class="muted" style="font-weight:900;">Тренеров пока нет</div>
+      </div>
+    {% endfor %}
+  </div>
+{% endblock %}

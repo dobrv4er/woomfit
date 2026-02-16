@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ post.title }} — Новости{% endblock %}
+
+{% block content %}
+<div class="card" style="padding:14px;">
+  <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
+    <div>
+      <div class="muted" style="font-weight:900;">
+        {% if post.badge %}{{ post.badge|upper }}{% else %}НОВОСТЬ{% endif %}
+        • {{ post.published_at|date:"d.m.Y" }}
+      </div>
+      <h1 style="margin:6px 0 10px 0; font-size:26px; line-height:1.15;">{{ post.title }}</h1>
+    </div>
+    <a class="btn btn--ghost" href="{% url 'news:list' %}">Все новости</a>
+  </div>
+
+  {% if post.cover %}
+    <div style="margin-top:10px;">
+      <img src="{{ post.cover.url }}" alt="" style="width:100%; border-radius:18px;">
+    </div>
+  {% endif %}
+
+  {% if post.body %}
+    <div style="margin-top:14px; font-size:16px; line-height:1.55; white-space:pre-line;">
+      {{ post.body }}
+    </div>
+  {% endif %}
+
+  {% if post.images.all %}
+    <div style="margin-top:14px; display:grid; grid-template-columns:repeat(3, 1fr); gap:10px;">
+      {% for im in post.images.all %}
+        <a href="{{ im.image.url }}" target="_blank" style="display:block;">
+          <img src="{{ im.image.url }}" alt="" style="width:100%; aspect-ratio:1/1; object-fit:cover; border-radius:16px;">
+        </a>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

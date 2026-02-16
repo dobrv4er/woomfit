@@ -1,0 +1,115 @@
+/* ===== WOOMFIT PINK ADMIN THEME (no packages) ===== */
+
+@font-face {
+  font-family: "Tilda Sans";
+  src:
+    url("/static/fonts/tilda/TildaSans-VF.woff2") format("woff2"),
+    url("/static/fonts/tilda/TildaSans-VF.woff") format("woff");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+
+
+
+
+
+
+
+
+
+
+:root{
+  --pink:#ff4f8f;
+  --pink2:#ff2f7b;
+  --pinkSoft:rgba(255,79,143,.12);
+  --border:#e5e7eb;
+  --text:#111827;
+}
+
+#header{
+  background: linear-gradient(135deg, var(--pink), var(--pink2)) !important;
+}
+#header, #header a:link, #header a:visited{
+  color:#fff !important;
+}
+#branding h1, #branding h1 a{
+  color:#fff !important;
+  font-weight:900 !important;
+}
+
+.pink-navbtn{
+  margin-left:12px;
+  padding:7px 12px;
+  border-radius:999px;
+  background:#fff;
+  color:var(--pink2) !important;
+  text-decoration:none !important;
+  font-weight:900;
+  border:1px solid rgba(255,255,255,.55);
+}
+.pink-navbtn:hover{ opacity:.92; }
+
+a:link, a:visited{
+  color: var(--pink2);
+}
+a:hover{ color: var(--pink); }
+
+.button, input[type=submit], input[type=button], .submit-row input{
+  background: var(--pink2) !important;
+  border-color: var(--pink2) !important;
+  color:#fff !important;
+  border-radius:12px !important;
+  font-weight:900 !important;
+}
+.button:hover, input[type=submit]:hover, input[type=button]:hover{
+  background: var(--pink) !important;
+  border-color: var(--pink) !important;
+}
+
+.module h2, .module caption, .inline-group h2{
+  background: var(--pinkSoft) !important;
+  color: var(--text) !important;
+  font-weight:900 !important;
+  border-bottom:1px solid var(--border) !important;
+}
+
+#content-main .object-tools a.addlink,
+.object-tools a.addlink{
+  background: var(--pink2) !important;
+  color:#fff !important;
+  border-radius:999px !important;
+  font-weight:900 !important;
+}
+
+fieldset.module, .module{
+  border-radius:14px !important;
+  overflow:hidden;
+}
+
+input, select, textarea{
+  border-radius:10px !important;
+  border-color: var(--border) !important;
+}
+input:focus, select:focus, textarea:focus{
+  outline: none !important;
+  border-color: var(--pink) !important;
+  box-shadow: 0 0 0 4px rgba(255,79,143,.18) !important;
+}
+
+tr.row1:hover, tr.row2:hover{
+  background: rgba(255,79,143,.06) !important;
+}
+
+.submit-row{
+  border-top:1px solid var(--border) !important;
+}
+html, body,
+#content,
+.crm-wrap,
+.admin-interface,
+* {
+  font-family: "Tilda Sans", -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, Inter, Arial, sans-serif;
+}

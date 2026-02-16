@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+{% block title %}Главная — WOOM FIT{% endblock %}
+{% block content %}
+{% load static %}
+
+<style>
+@font-face{
+  font-family: "Tilda Sans VF";
+  src:
+    url("/static/fonts/tilda/TildaSans-VF.woff2") format("woff2"),
+    url("/static/fonts/tilda/TildaSans-VF.woff") format("woff");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face{
+  font-family: "TildaSans-Bold";
+  src:
+    url("/static/fonts/tilda/TildaSans-Bold.woff2") format("woff2"),
+    url("/static/fonts/tilda/TildaSans-Bold.woff") format("woff");
+  font-weight: 700 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+ :root{
+  --font-head: "TildaSans-Bold", "Tilda Sans VF", sans-serif;
+  --font-body: "Tilda Sans VF", sans-serif;
+}
+
+body{
+  font-family: var(--font-body);
+  font-weight: 450;
+}
+
+
+  /* Мои занятия: если записей > 2 — листаем внутри карточки */
+  .my-bookings-scroll{
+    max-height: 182px;   /* примерно 2 строки */
+    overflow-y: auto;
+  }
+  .my-bookings-scroll::-webkit-scrollbar{ width: 6px; }
+  .my-bookings-scroll::-webkit-scrollbar-thumb{ border-radius: 999px; }
+
+  .my-booking-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .my-booking-link{
+    flex:1;
+    min-width:0;
+    text-decoration:none;
+    color:inherit;
+  }
+  .my-booking-cancel{
+    white-space:nowrap;
+    padding:10px 12px;
+  }
+  /* ===== Типографика главной ===== */
+
+/* Заголовки */
+.section-title,
+.hero__name,
+.item__title {
+  font-family: var(--font-main);
+  font-weight: var(--fw-black);
+  letter-spacing: 0.01em;
+}
+
+/* Крупное имя */
+.hero__name{
+  font-size: 20px;
+}
+
+/* Обычный текст */
+.hero__club,
+.item__subtitle,
+.muted,
+.news-card__label {
+  font-family: var(--font-main);
+  font-weight: var(--fw-regular);
+}
+
+/* Кнопки */
+.btn{
+  font-family: var(--font-main);
+  font-weight: var(--fw-bold);
+}
+/* ===== Увеличение читаемости карточек ===== */
+
+/* Заголовок пункта */
+.item__title{
+  font-size: 16.5px;      /* было ~14–15 */
+  
+  font-weight: 800;
+}
+
+/* Подзаголовок */
+.item__subtitle{
+  font-size: 14px;        /* было ~12–13 */
+  
+  margin-top: 2px;
+}
+
+/* Вся карточка — больше воздуха */
+.item{
+  padding: 14px 16px;     /* было меньше */
+}
+
+/* Иконка — чуть крупнее */
+.item__icon{
+  width: 40px;            /* было 36 */
+  height: 40px;
+  border-radius: 12px;
+}
+
+.item__icon img,
+.item__icon svg{
+  width: 22px;
+  height: 22px;
+}
+
+/* Стрелка справа */
+.item__chev{
+  font-size: 20px;
+
+}
+/* Заголовки */
+.section-title,
+.hero__name,
+.item__title {
+  font-family: var(--font-head);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+/* Обычный текст */
+.hero__club,
+.item__subtitle,
+.muted,
+.news-card__label {
+  font-family: var(--font-body);
+  font-weight: 450;
+}
+
+/* Кнопки (можно VF, но жирные обычно приятнее) */
+.btn{
+  font-family: var(--font-head);
+  font-weight: 800;
+}
+
+
+/* ===== hero stats (кошелек/лояльность) ===== */
+.hero__stats{
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hero__pill{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid rgba(255,45,125,0.18);
+  color: rgba(17,24,39,0.9);
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.hero__pill b{font-weight: 900;}
+.hero__pill .mut{opacity: 0.7; font-weight: 650;}
+
+.hero__pill--pink{
+  background: rgba(255,255,255,0.55);
+  border: 1px solid rgba(255,45,125,0.18);
+}
+
+</style>
+
+<section class="hero">
+  <div class="hero__avatar">👤</div>
+  <div>
+    <div class="hero__name">
+      {% if request.user.is_authenticated %}
+        {{ request.user.first_name|default:request.user.username }} {{ request.user.last_name }}
+      {% else %}
+        Гость
+      {% endif %}
+    </div>
+    <div class="hero__club">WOOM FIT</div>
+        {% if request.user.is_authenticated %}
+      <div class="hero__stats">
+        <span class="hero__pill hero__pill--pink">
+          💳 <span class="mut">Кошелёк:</span>
+          <b>{{ request.user.wallet.balance }}</b> ₽
+        </span>
+
+        
+
+        <span class="hero__pill">
+          🎁 <span class="mut">Скидка:</span>
+          <b>{{ request.user.loyalty.discount_percent }}%</b>
+          <span class="mut">({{ request.user.loyalty.tier }})</span>
+        </span>
+      </div>
+    {% endif %}
+
+  </div>
+</section>
+
+<h2 class="section-title">Мои занятия</h2>
+<div class="card">
+  {% if my_bookings %}
+    <div class="list my-bookings-scroll">
+      {% for b in my_bookings %}
+        <div class="item my-booking-row">
+          <a class="my-booking-link"
+             href="{% url 'schedule:list' %}?day={{ b.session.start_at|date:'Y-m-d' }}&loc={{ b.session.location|urlencode }}#session-{{ b.session.id }}">
+            <div class="item__left">
+              <div class="item__icon">🧘</div>
+              <div>
+                <div class="item__title">{{ b.session.title }}</div>
+                <div class="item__subtitle">{{ b.session.start_at|date:"d.m H:i" }} • {{ b.session.duration_min }} мин • {{ b.session.location }}</div>
+              </div>
+            </div>
+          </a>
+
+          <a class="btn btn--ghost my-booking-cancel"
+             href="{% url 'schedule:unbook' b.session.id %}">
+            Отменить
+          </a>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div style="margin-top:12px;">
+      <a class="btn btn--primary btn--full" href="{% url 'schedule:list' %}">Перейти в расписание</a>
+    </div>
+  {% else %}
+    <div class="muted" style="text-align:center; font-weight:900; padding:8px 0;">Занятий нет</div>
+    <div class="muted" style="text-align:center; padding-bottom:8px; font-weight:800;">Вы не записаны на тренировки</div>
+    <a class="btn btn--primary btn--full" href="{% url 'schedule:list' %}">Перейти в расписание</a>
+  {% endif %}
+</div>
+
+<h2 class="section-title">Новости</h2>
+
+<div class="news-row">
+  {% for post in top_news %}
+    <a class="news-card"
+       href="{{ post.get_absolute_url }}"
+       style="--news-font: {{ post.font_css }}; --news-text: {{ post.text_color }}; --news-ovl-rgb: {{ post.overlay_rgb }}; --news-ovl-a: {{ post.overlay_alpha }};">
+      {% if post.cover %}
+        <img class="news-card__img" src="{{ post.cover.url }}" alt="">
+      {% else %}
+        <div class="news-card__img news-card__img--stub"></div>
+      {% endif %}
+      <div class="news-card__shade news-card__shade--{{ post.overlay_style }}"></div>
+      <div class="news-card__label">{{ post.card_text|upper }}</div>
+    </a>
+  {% empty %}
+    <div class="card" style="text-align:center;">
+      <div class="muted" style="font-weight:900;">Новостей пока нет</div>
+    </div>
+  {% endfor %}
+</div>
+
+<h2 class="section-title">WOOM FIT</h2>
+<div class="list">
+  <a class="item" href="{% url 'core:about' %}">
+    <div class="item__left">
+      <div class="item__icon" style="background:#ffe7b5;color:#b45309;">★</div>
+      <div>
+        <div class="item__title">О клубе</div>
+        <div class="item__subtitle">Информация о нас, контактная информация и телефоны</div>
+      </div>
+    </div>
+    <div class="item__chev">›</div>
+  </a>
+
+  <a class="item" href="{% url 'core:trainers' %}">
+    <div class="item__left">
+      <div class="item__icon" style="background:#e0e7ff;color:#4338ca;">🎯</div>
+      <div>
+        <div class="item__title">Тренеры</div>
+        <div class="item__subtitle">Список всех тренеров нашего клуба</div>
+      </div>
+    </div>
+    <div class="item__chev">›</div>
+  </a>
+
+  <a class="item" href="{% url 'core:rent' %}">
+    <div class="item__left">
+      {% load static %}
+      <div class="item__icon" >
+        <img src="{% static 'img/2.svg' %}" alt="" style="width:22px;height:22px;display:block;">
+      </div>
+
+
+
+      <div>
+        <div class="item__title">Аренда зала</div>
+        <div class="item__subtitle">Вы можете взять в аренду зал в нашем клубе</div>
+      </div>
+    </div>
+    <div class="item__chev">›</div>
+  </a>
+
+  
+</div>
+
+{% endblock %}

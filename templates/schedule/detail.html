@@ -1,0 +1,631 @@
+{% extends "base.html" %}
+{% block title %}{{ s.workout.name|default:s.title }} — WOOM FIT{% endblock %}
+
+{% block topbar_left %}
+  <a class="btn btn--ghost" style="padding:8px 10px; border-radius:14px;" href="{% url 'schedule:list' %}">←</a>
+{% endblock %}
+
+{% block content %}
+<style>
+  .hero{
+    width:100%;
+    height:220px;
+    border-radius:18px;
+    background:#f2f4f7;
+    overflow:hidden;
+    position:relative;
+    display:flex;
+    align-items:flex-end;
+    justify-content:flex-start;
+    padding:14px;
+  }
+  .hero img{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    object-fit:cover;
+  }
+  .hero::after{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:linear-gradient(to top, rgba(0,0,0,.35), rgba(0,0,0,0));
+    pointer-events:none;
+  }
+  .badge{
+    position:relative;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    padding:8px 10px;
+    border-radius:999px;
+    background:rgba(255,255,255,.92);
+    font-weight:900;
+    z-index:1;
+  }
+  .title{
+    font-weight:950;
+    font-size:22px;
+    margin:12px 0 0;
+  }
+
+  .kv{display:flex; justify-content:space-between; gap:12px; padding:12px 0;}
+  .kv .k{font-size:12px; font-weight:900; opacity:.6;}
+  .kv .v{font-size:18px; font-weight:900;}
+
+  .trainer{
+    display:flex; align-items:center; gap:12px;
+    background:#fff;
+    border-radius:18px;
+    padding:12px;
+    box-shadow: 0 10px 18px rgba(0,0,0,0.10);
+  }
+  .avatar{width:44px; height:44px; border-radius:50%; background:#f2f4f7; flex:0 0 auto;}
+  .trainer .name{font-weight:900;}
+  .trainer .sub{font-weight:800; opacity:.6; font-size:13px;}
+
+  .cta{
+    position:sticky;
+    bottom:0;
+    background:linear-gradient(to top, rgba(255,255,255,1), rgba(255,255,255,.65));
+    padding:12px 0 0;
+  }
+  .cta .note{font-weight:800; opacity:.7; text-align:center; margin-top:10px;}
+
+  .info h3{margin:0 0 8px; font-size:18px;}
+  .info p{margin:0 0 12px; line-height:1.45; white-space:pre-line;}
+
+  /* ===== Bottom Sheet (iOS-like) ===== */
+  #sheetBackdrop{
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.45);
+    display: none;
+    z-index: 9999;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #sheetBackdrop.is-open{ display:block; }
+
+  #sheet{
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    transform: translateY(110%);
+    transition: transform .24s cubic-bezier(.2,.9,.2,1);
+    z-index: 10000;
+    padding: 10px 12px calc(14px + env(safe-area-inset-bottom));
+    will-change: transform;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #sheet.is-open{ transform: translateY(0); }
+
+  .sheet-card{
+    background:#fff;
+    border-radius: 22px;
+    box-shadow: 0 22px 70px rgba(0,0,0,.28);
+    overflow:hidden;
+  }
+  .sheet-handle{
+    width:42px;
+    height:5px;
+    border-radius:999px;
+    background: rgba(0,0,0,.12);
+    margin: 10px auto 6px;
+    touch-action:none; /* drag only here */
+  }
+  .sheet-head{
+    padding: 10px 14px 12px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap: 10px;
+  }
+  .sheet-title{
+    font-weight: 950;
+    font-size: 16px;
+    letter-spacing: .2px;
+  }
+  .sheet-close{
+    border:0;
+    background:#f2f4f7;
+    border-radius: 14px;
+    padding: 8px 10px;
+    font-weight: 900;
+    cursor:pointer;
+  }
+  .sheet-body{ padding: 0 14px 14px; }
+
+  .choice{
+    border-radius:18px;
+    background:#f8fafc;
+    padding: 12px;
+    border: 1px solid rgba(0,0,0,.06);
+    transition: border-color .15s ease, box-shadow .15s ease;
+  }
+  .choice + .choice{ margin-top: 10px; }
+
+  .choice-top{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:12px;
+  }
+  .choice-left{ min-width:0; }
+  .choice-name{ font-weight:950; font-size:15px; }
+  .choice-desc{
+    margin-top:2px;
+    font-weight:800;
+    opacity:.65;
+    font-size:13px;
+    line-height:1.25;
+  }
+
+  .pradio{
+    width:22px; height:22px;
+    border-radius:999px;
+    border:2px solid rgba(0,0,0,.18);
+    display:flex; align-items:center; justify-content:center;
+    flex:0 0 auto;
+    margin-top:2px;
+    background:#fff;
+  }
+  .pradio::after{
+    content:"";
+    width:10px; height:10px;
+    border-radius:999px;
+    background:transparent;
+  }
+  input[type="radio"].sr{
+    position:absolute;
+    opacity:0;
+    pointer-events:none;
+  }
+  .choice.is-active{
+    border-color: rgba(255, 67, 120, .35);
+    box-shadow: 0 10px 18px rgba(255, 67, 120, .08);
+  }
+  .choice.is-active .pradio{
+    border-color: rgba(255, 67, 120, .9);
+  }
+  .choice.is-active .pradio::after{
+    background: rgba(255, 67, 120, .95);
+  }
+
+  .mwrap{ margin-top: 10px; display:flex; flex-direction:column; gap:8px; }
+  .mitem{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:10px;
+    padding: 10px 12px;
+    border-radius:16px;
+    background:#fff;
+    border:1px solid rgba(0,0,0,.06);
+    transition: border-color .15s ease, box-shadow .15s ease;
+  }
+  .mleft{ min-width:0; flex:1 1 auto; }
+  .mttl{ font-weight:950; font-size:14px; line-height:1.15; }
+  .msub{ margin-top:2px; font-weight:850; opacity:.7; font-size:12px; }
+
+  .chips{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .chip{
+    display:inline-flex;
+    align-items:center;
+    padding:6px 8px;
+    border-radius:999px;
+    font-weight:900;
+    font-size:11px;
+    background:#f2f4f7;
+    color: rgba(0,0,0,.75);
+  }
+  .chip--ok{ background: rgba(46, 204, 113, .14); }
+  .chip--bad{ background: rgba(255, 67, 120, .12); }
+
+  .mcheck{
+    width:18px; height:18px;
+    border-radius:999px;
+    border:2px solid rgba(0,0,0,.18);
+    display:flex; align-items:center; justify-content:center;
+    background:#fff;
+    flex:0 0 auto;
+    margin-top:2px;
+  }
+  .mcheck::after{
+    content:"";
+    width:8px; height:8px;
+    border-radius:999px;
+    background: transparent;
+  }
+  .mitem.is-active{
+    border-color: rgba(255, 67, 120, .35);
+    box-shadow: 0 10px 18px rgba(255, 67, 120, .10);
+  }
+  .mitem.is-active .mcheck{ border-color: rgba(255, 67, 120, .9); }
+  .mitem.is-active .mcheck::after{ background: rgba(255, 67, 120, .95); }
+
+  .sheet-foot{
+    padding: 12px 14px 14px;
+    border-top: 1px solid rgba(0,0,0,.06);
+  }
+  .sheet-note{
+    text-align:center;
+    margin-top: 10px;
+    font-weight: 850;
+    opacity: .7;
+  }
+
+  .btn--primary{ border-radius: 16px !important; font-weight: 950 !important; }
+  .btn--primary[disabled]{ opacity:.55; pointer-events:none; }
+</style>
+
+<div class="hero">
+  {% if s.workout and s.workout.image %}
+    <img src="{{ s.workout.image.url }}" alt="">
+  {% endif %}
+  <div class="badge">ГРУППОВОЕ ЗАНЯТИЕ</div>
+</div>
+
+<div class="title">{{ s.workout.name|default:s.title }}</div>
+
+<div class="card" style="margin-top:10px;">
+  <div class="kv">
+    <div>
+      <div class="k">Дата</div>
+      <div class="v">{{ s.start_at|date:"j E, l" }}</div>
+    </div>
+    <div style="text-align:right;">
+      <div class="k">Время</div>
+      <div class="v">{{ s.start_at|date:"H:i" }}</div>
+      <div class="k" style="margin-top:4px;">{{ s.duration_min }} мин</div>
+    </div>
+  </div>
+
+  <div style="height:8px;"></div>
+
+  <div class="k" style="font-weight:900; opacity:.6;">Место проведения</div>
+  <div style="font-weight:900; font-size:18px;">{{ s.location }}</div>
+</div>
+
+<div style="height:12px;"></div>
+
+<div class="k" style="font-weight:900; opacity:.6; margin-bottom:8px;">Тренер</div>
+<div class="trainer">
+  <div class="avatar"></div>
+  <div style="min-width:0;">
+    <div class="name">{{ s.trainer.name }}</div>
+    <div class="sub">Персональный тренер</div>
+  </div>
+  <div class="item__chev" style="margin-left:auto;">›</div>
+</div>
+
+<div style="height:12px;"></div>
+
+<div class="card info">
+  <h3>Описание</h3>
+  {% if s.workout and s.workout.level %}
+    <p><b>Уровень:</b> {{ s.workout.level }}</p>
+  {% endif %}
+  <p>{{ s.workout.description|default:"" }}</p>
+
+  {% if s.workout and s.workout.what_to_bring %}
+    <p style="margin-bottom:0;"><b>Что нужно с собой?</b><br>{{ s.workout.what_to_bring }}</p>
+  {% endif %}
+</div>
+
+<div class="cta">
+  <div class="card" style="padding:14px;">
+    {% if not user.is_authenticated %}
+      <a class="btn btn--primary btn--full" href="{% url 'login' %}?next={{ request.path|urlencode }}">Войти</a>
+    {% else %}
+      {% if state == 'booked' %}
+        <a class="btn btn--muted btn--full" href="{% url 'schedule:unbook' s.id %}">Отменить запись</a>
+      {% elif is_full %}
+        <form method="post">
+          {% csrf_token %}
+          <button class="btn btn--primary btn--full" type="submit" name="action" value="waitlist">Записаться в лист ожидания</button>
+        </form>
+      {% else %}
+        {% if state == 'waitlist' %}
+          <form method="post">
+            {% csrf_token %}
+            <button class="btn btn--muted btn--full" type="submit" name="action" value="cancel_waitlist">Отменить ожидание</button>
+          </form>
+          <div class="note">Вы в листе ожидания.</div>
+        {% else %}
+          <button id="openSheetBtn" class="btn btn--primary btn--full" type="button">Записаться</button>
+        {% endif %}
+      {% endif %}
+    {% endif %}
+
+    <div class="note">
+      {% if is_full %}
+        Свободных мест нет.
+      {% else %}
+        Осталось мест: <b>{{ seats_left }}</b>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Bottom Sheet -->
+<div id="sheetBackdrop" aria-hidden="true"></div>
+
+<div id="sheet" aria-hidden="true">
+  <div class="sheet-card">
+    <div class="sheet-handle" id="sheetHandle"></div>
+
+    <div class="sheet-head">
+      <div class="sheet-title">Как оплатить тренировку?</div>
+      <button class="sheet-close" type="button" id="closeSheetBtn">Закрыть</button>
+    </div>
+
+    <form id="sheetForm" method="post" action="{% url 'schedule:choose_payment' s.id %}">
+      {% csrf_token %}
+      <div class="sheet-body">
+
+        <div id="choiceMembership" class="choice">
+          <div class="choice-top">
+            <div class="choice-left">
+              <div class="choice-name">Абонемент</div>
+              <div class="choice-desc">Списать 1 занятие с выбранного абонемента</div>
+            </div>
+            <label style="display:flex; align-items:center; cursor:pointer;">
+              <input class="sr" type="radio" name="method" value="membership" id="methodMembership">
+              <span class="pradio" aria-hidden="true"></span>
+            </label>
+          </div>
+
+          <div class="mwrap" id="membershipList">
+            {% if memberships %}
+              {% for m in memberships %}
+                <label class="mitem" data-mid="{{ m.id }}" style="cursor:pointer;">
+                  <div class="mleft">
+                    <div class="mttl">{{ m.title }}</div>
+
+                    <div class="chips">
+                      {% if m.is_active %}
+                        <span class="chip chip--ok">Активен</span>
+                      {% else %}
+                        <span class="chip chip--bad">Не активен</span>
+                      {% endif %}
+
+                      {% if m.left_visits != None %}
+                        <span class="chip">Осталось: {{ m.left_visits }}</span>
+                      {% endif %}
+                      {% if m.total_visits != None %}
+                        <span class="chip">Всего: {{ m.total_visits }}</span>
+                      {% endif %}
+                      {% if m.end_date %}
+                        <span class="chip">До: {{ m.end_date|date:"d.m.Y" }}</span>
+                      {% endif %}
+                    </div>
+
+                    {% if m.start_date or m.end_date %}
+                      <div class="msub">
+                        {% if m.start_date %}С: {{ m.start_date|date:"d.m.Y" }}{% endif %}
+                        {% if m.start_date and m.end_date %} • {% endif %}
+                        {% if m.end_date %}По: {{ m.end_date|date:"d.m.Y" }}{% endif %}
+                      </div>
+                    {% endif %}
+                  </div>
+
+                  <div class="mcheck" aria-hidden="true"></div>
+                  <input class="sr membership-radio" type="radio" name="membership_id" value="{{ m.id }}">
+                </label>
+              {% endfor %}
+            {% else %}
+              <div class="muted" style="font-weight:900;">Нет подходящих абонементов</div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div id="choicePay" class="choice">
+          <div class="choice-top">
+            <div class="choice-left">
+              <div class="choice-name">Оплата</div>
+              <div class="choice-desc">Кошелёк или онлайн (после оплаты создадим разовый абонемент на 1 посещение)</div>
+            </div>
+            <label style="display:flex; align-items:center; cursor:pointer;">
+              <input class="sr" type="radio" name="method" value="pay" id="methodPay">
+              <span class="pradio" aria-hidden="true"></span>
+            </label>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="sheet-foot">
+        <button id="continueBtn" class="btn btn--primary btn--full" type="submit" disabled>Продолжить</button>
+        <div class="sheet-note">При отмене записи посещение вернётся на абонемент.</div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function(){
+  const openBtn = document.getElementById('openSheetBtn');
+  const backdrop = document.getElementById('sheetBackdrop');
+  const sheet = document.getElementById('sheet');
+  const closeBtn = document.getElementById('closeSheetBtn');
+  const handle = document.getElementById('sheetHandle');
+
+  const form = document.getElementById('sheetForm');
+  const continueBtn = document.getElementById('continueBtn');
+
+  const choiceM = document.getElementById('choiceMembership');
+  const choiceP = document.getElementById('choicePay');
+  const methodM = document.getElementById('methodMembership');
+  const methodP = document.getElementById('methodPay');
+
+  const membershipRadios = Array.from(document.querySelectorAll('.membership-radio'));
+  const membershipItems = Array.from(document.querySelectorAll('.mitem'));
+
+  // initial: nothing selected
+  if (methodM) methodM.checked = false;
+  if (methodP) methodP.checked = false;
+  membershipRadios.forEach(r => { r.checked = false; r.required = false; r.disabled = true; });
+
+  function openSheet(){
+    if (!backdrop || !sheet) return;
+    backdrop.classList.add('is-open');
+    sheet.classList.add('is-open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeSheet(){
+    if (!backdrop || !sheet) return;
+    backdrop.classList.remove('is-open');
+    sheet.classList.remove('is-open');
+    document.body.style.overflow = '';
+  }
+
+  if (openBtn) openBtn.addEventListener('click', openSheet);
+  if (backdrop) backdrop.addEventListener('click', closeSheet);
+
+  if (closeBtn) {
+    closeBtn.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      closeSheet();
+    });
+  }
+
+  function clearActive(){
+    choiceM.classList.remove('is-active');
+    choiceP.classList.remove('is-active');
+  }
+
+  function syncContinueEnabled(){
+    const mChecked = methodM && methodM.checked;
+    const pChecked = methodP && methodP.checked;
+
+    if (!mChecked && !pChecked){
+      continueBtn.disabled = true;
+      return;
+    }
+    if (pChecked){
+      continueBtn.disabled = false;
+      return;
+    }
+    // membership выбран
+    const chosen = membershipRadios.find(r => r.checked);
+    continueBtn.disabled = !chosen;
+  }
+
+  function setActive(which){
+    clearActive();
+
+    if (which === 'membership'){
+      choiceM.classList.add('is-active');
+      membershipRadios.forEach(r => { r.disabled = false; r.required = true; });
+    } else if (which === 'pay'){
+      choiceP.classList.add('is-active');
+      membershipRadios.forEach(r => { r.required = false; r.disabled = true; r.checked = false; });
+      membershipItems.forEach(el => el.classList.remove('is-active'));
+    } else {
+      membershipRadios.forEach(r => { r.required = false; r.disabled = true; });
+      membershipItems.forEach(el => el.classList.remove('is-active'));
+    }
+
+    syncContinueEnabled();
+  }
+
+  function syncMembershipActive(){
+    const checked = membershipRadios.find(r => r.checked);
+    membershipItems.forEach(el => {
+      const mid = el.getAttribute('data-mid');
+      el.classList.toggle('is-active', checked && String(checked.value) === String(mid));
+    });
+    syncContinueEnabled();
+  }
+
+  if (methodM) methodM.addEventListener('change', () => setActive('membership'));
+  if (methodP) methodP.addEventListener('change', () => setActive('pay'));
+
+  membershipRadios.forEach(r => r.addEventListener('change', syncMembershipActive));
+
+  membershipItems.forEach(el => {
+    el.addEventListener('click', () => {
+      if (methodM) methodM.checked = true;
+      setActive('membership');
+      const r = el.querySelector('.membership-radio');
+      if (r && !r.disabled) r.checked = true;
+      syncMembershipActive();
+    });
+  });
+
+  setActive(null);
+
+  // validate submit
+  if (form) {
+    form.addEventListener('submit', function(e){
+      const mChecked = methodM && methodM.checked;
+      const pChecked = methodP && methodP.checked;
+
+      if (!mChecked && !pChecked){
+        e.preventDefault();
+        alert('Выберите способ оплаты');
+        return;
+      }
+      if (mChecked){
+        const chosen = membershipRadios.find(r => r.checked);
+        if (!chosen){
+          e.preventDefault();
+          alert('Выберите абонемент');
+          return;
+        }
+      }
+    });
+  }
+
+  // iOS-like drag-to-close (only handle)
+  let dragging = false;
+  let startY = 0;
+  let currentY = 0;
+
+  function onDown(e){
+    if (!sheet.classList.contains('is-open')) return;
+    dragging = true;
+    sheet.style.transition = 'none';
+    startY = (e.touches ? e.touches[0].clientY : e.clientY);
+    currentY = 0;
+  }
+
+  function onMove(e){
+    if (!dragging) return;
+    const y = (e.touches ? e.touches[0].clientY : e.clientY);
+    const dy = Math.max(0, y - startY);
+    currentY = dy;
+    sheet.style.transform = `translateY(${dy}px)`;
+  }
+
+  function onUp(){
+    if (!dragging) return;
+    dragging = false;
+    sheet.style.transition = 'transform .24s cubic-bezier(.2,.9,.2,1)';
+
+    const threshold = 120;
+    if (currentY > threshold){
+      sheet.style.transform = 'translateY(110%)';
+      setTimeout(() => {
+        sheet.style.transform = '';
+        closeSheet();
+      }, 220);
+    } else {
+      sheet.style.transform = 'translateY(0)';
+    }
+  }
+
+  if (handle){
+    handle.addEventListener('touchstart', onDown, {passive:true});
+    handle.addEventListener('touchmove', onMove, {passive:true});
+    handle.addEventListener('touchend', onUp, {passive:true});
+
+    handle.addEventListener('mousedown', onDown);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+})();
+</script>
+
+{% endblock %}

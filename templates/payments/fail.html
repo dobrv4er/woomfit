@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Оплата не прошла — WOOM FIT{% endblock %}
+{% block content %}
+  <div class="card" style="text-align:center;">
+    <div style="font-size:56px;">⚠️</div>
+    <div style="font-weight:900; font-size:22px; margin-top:8px;">Оплата не прошла</div>
+    <div class="muted" style="margin-top:8px;">Попробуйте ещё раз или обратитесь в клуб.</div>
+    <div style="margin-top:14px; display:flex; gap:10px; justify-content:center;">
+      <a class="btn btn--ghost" href="{% url 'shop:cart' %}">В корзину</a>
+      <a class="btn btn--primary" href="{% url 'shop:index' %}">В магазин</a>
+    </div>
+  </div>
+{% endblock %}

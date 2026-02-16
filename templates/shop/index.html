@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}Магазин — WOOM FIT{% endblock %}
+
+{% block topbar_right %}
+  <a class="btn btn--ghost" style="padding:8px 10px; border-radius:14px;" href="{% url 'shop:cart' %}">🛒{% if cart.count %} ({{ cart.count }}){% endif %}</a>
+{% endblock %}
+
+{% block content %}
+
+<style>
+  .shop-tabs{
+    display:flex;
+    gap:10px;
+    overflow-x:auto;
+    padding-bottom:6px;
+    margin-bottom:14px;
+  }
+  .shop-tabs::-webkit-scrollbar{ height:8px; }
+  .shop-tabs::-webkit-scrollbar-thumb{ border-radius:10px; background:rgba(0,0,0,0.12); }
+
+  .shop-tab{
+    flex:0 0 auto;
+    padding:10px 14px;
+    border-radius:999px;
+    border:1px solid var(--border);
+    background:#fff;
+    font-weight:900;
+    text-decoration:none;
+    color:#475569;
+    white-space:nowrap;
+  }
+  .shop-tab.is-active{
+    color:#fff;
+    border-color:transparent;
+    background:linear-gradient(135deg,var(--pink),var(--pink2));
+    box-shadow:0 10px 22px rgba(233,76,122,0.18);
+  }
+
+  .shop-cat-title{
+    margin: 16px 0 10px;
+    font-size: 14px;
+    font-weight: 900;
+    color:#64748b;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+
+  .shop-grid{
+    display:grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap:14px;
+  }
+  @media (min-width: 900px){
+    .shop-grid{grid-template-columns: repeat(4, minmax(0, 1fr));}
+  }
+
+  .shop-card{
+    background:#fff;
+    border:1px solid var(--border);
+    border-radius:18px;
+    overflow:hidden;
+    box-shadow:0 10px 22px rgba(15,23,42,0.06);
+    display:flex;
+    flex-direction:column;
+    min-height: 208px;
+  }
+  .shop-card__img{
+    position:relative;
+    height:120px;
+    background:#f1f5f9;
+    overflow:hidden;
+  }
+  .shop-card__img img{
+    width:100%; height:100%; object-fit:cover; display:block;
+  }
+  .shop-card__badge{
+    position:absolute;
+    top:10px; left:10px;
+    background:rgba(255,255,255,0.92);
+    border:1px solid rgba(0,0,0,0.08);
+    border-radius:999px;
+    padding:6px 10px;
+    font-weight:900;
+    font-size:12px;
+  }
+  .shop-card__body{padding:12px; display:grid; gap:6px;}
+  .shop-card__title{font-weight:900; font-size:15px; line-height:1.15;}
+  .shop-card__sub{color:var(--muted); font-weight:800; font-size:12.5px; line-height:1.2;}
+
+  .shop-card__footer{
+    margin-top:auto;
+    padding:12px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    border-top:1px solid rgba(0,0,0,0.06);
+  }
+  .shop-price{font-weight:900; font-size:16px;}
+  .shop-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .shop-btn{padding:10px 12px; border-radius:14px; white-space:nowrap;}
+  .shop-btn.btn--muted{background:#f1f5f9;border:1px solid rgba(0,0,0,0.06);}
+</style>
+
+<div class="shop-tabs">
+  {% for t in tabs %}
+    <a class="shop-tab {% if t.active %}is-active{% endif %}" href="?section={{ t.key }}">{{ t.label }}</a>
+  {% endfor %}
+</div>
+
+{% for c in categories %}
+  <div class="shop-cat-title">{{ c.name }}</div>
+  <div class="shop-grid">
+    {% for p in c.products.all %}
+      {% if p.is_active %}
+        <div class="shop-card">
+          <div class="shop-card__img">
+            {% if p.image %}
+              <img src="{{ p.image.url }}" alt="">
+            {% endif %}
+            {% if p.badge %}
+              <div class="shop-card__badge">{{ p.badge }}</div>
+            {% endif %}
+          </div>
+
+          <div class="shop-card__body">
+            <div class="shop-card__title">{{ p.name }}</div>
+            {% if p.subtitle %}
+              <div class="shop-card__sub">{{ p.subtitle }}</div>
+            {% else %}
+              <div class="shop-card__sub">&nbsp;</div>
+            {% endif %}
+          </div>
+
+          <div class="shop-card__footer">
+            <div class="shop-price">{{ p.price_rub }} ₽</div>
+            <div class="shop-actions">
+              <a class="btn btn--muted shop-btn" href="{% url 'shop:cart_add' p.id %}">В корзину</a>
+              <a class="btn btn--primary shop-btn" href="{% url 'shop:buy_now' p.id %}">Купить</a>
+            </div>
+          </div>
+        </div>
+      {% endif %}
+    {% empty %}
+      <div class="muted" style="font-weight:800;">Товаров пока нет</div>
+    {% endfor %}
+  </div>
+{% endfor %}
+
+{% if not categories %}
+  <div class="card" style="text-align:center;">
+    <div class="muted" style="font-weight:900;">В этом разделе пока нет категорий</div>
+    <div class="muted" style="margin-top:6px;">Создай категории в админке магазина и выбери для них «Раздел».</div>
+  </div>
+{% endif %}
+
+{% if cart.count %}
+  <div style="height:14px;"></div>
+  <a class="btn btn--primary btn--full" href="{% url 'shop:cart' %}">
+    Открыть корзину ({{ cart.count }})
+  </a>
+{% endif %}
+
+{% endblock %}

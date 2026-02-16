@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}{{ section_label }} — WOOM FIT{% endblock %}
+
+{% block topbar_right %}
+  <a class="btn btn--ghost" style="padding:8px 10px; border-radius:14px;" href="{% url 'shop:cart' %}">
+    🛒{% if cart.count %} ({{ cart.count }}){% endif %}
+  </a>
+{% endblock %}
+
+{% block content %}
+<style>
+  .shop-wrap{padding-bottom:24px;}
+
+  .head{
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:12px;
+    margin:6px 0 10px;
+  }
+  .head__t{font-weight:900;font-size:22px;letter-spacing:-0.02em;}
+  .head__back{
+    text-decoration:none;
+    font-weight:900;
+    color:var(--pink);
+    padding:10px 12px;
+    border-radius:14px;
+    background:#fff;
+    border:1px solid rgba(0,0,0,0.06);
+  }
+
+  .segment{
+    display:flex;
+    gap:8px;
+    overflow-x:auto;
+    padding-bottom:6px;
+    margin:10px 0 12px;
+  }
+  .segment::-webkit-scrollbar{height:8px}
+  .segment::-webkit-scrollbar-thumb{border-radius:999px;background:rgba(15,23,42,0.12)}
+  .seg{
+    flex:0 0 auto;
+    padding:10px 12px;
+    border-radius:999px;
+    border:1px solid rgba(0,0,0,0.08);
+    background:#fff;
+    font-weight:900;
+    text-decoration:none;
+    color:#475569;
+    white-space:nowrap;
+  }
+  .seg.is-active{
+    color:#fff;
+    border-color:transparent;
+    background:linear-gradient(135deg,var(--pink),var(--pink2));
+    box-shadow:0 12px 24px rgba(233,76,122,0.18);
+  }
+
+  .cat-title{
+    margin:16px 0 10px;
+    font-weight:900;
+    font-size:13px;
+    color:#64748b;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+  }
+
+  /* Товары: одна колонка на мобиле (как iOS), две на широком экране */
+  .grid{
+    display:grid;
+    gap:12px;
+    grid-template-columns:1fr;
+  }
+  @media (min-width:900px){
+    .grid{grid-template-columns:repeat(2, minmax(0, 1fr));}
+  }
+
+  .p-card{
+    background:#fff;
+    border:1px solid rgba(0,0,0,0.06);
+    border-radius:24px;
+    box-shadow:0 14px 34px rgba(15,23,42,0.06);
+    overflow:hidden;
+    display:grid;
+    grid-template-columns: 110px 1fr;
+    gap:12px;
+    padding:12px;
+  }
+  .p-img{
+    width:110px;
+    height:110px;
+    border-radius:18px;
+    background:#f1f5f9;
+    border:1px solid rgba(0,0,0,0.06);
+    overflow:hidden;
+    position:relative;
+  }
+  .p-img img{width:100%;height:100%;object-fit:cover;display:block}
+  .p-badge{
+    position:absolute;
+    left:8px; top:8px;
+    padding:6px 10px;
+    border-radius:999px;
+    background:rgba(255,255,255,0.92);
+    border:1px solid rgba(0,0,0,0.08);
+    font-weight:900;
+    font-size:12px;
+  }
+
+  .p-body{min-width:0;display:flex;flex-direction:column;gap:8px;}
+  .p-title{font-weight:900;font-size:16px;line-height:1.1;letter-spacing:-0.01em;}
+  .p-sub{color:var(--muted);font-weight:800;font-size:12.5px;line-height:1.2;}
+  .p-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:auto;}
+  .p-price{font-weight:900;font-size:18px;}
+  .p-meta{color:#94a3b8;font-weight:900;font-size:12px;white-space:nowrap;}
+  .p-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;}
+</style>
+
+<div class="shop-wrap">
+  <div class="head">
+    <div class="head__t">{{ section_label }}</div>
+    <a class="head__back" href="{% url 'shop:menu' %}">Назад</a>
+  </div>
+
+  <div class="segment">
+    <a class="seg {% if section == 'memberships' %}is-active{% endif %}" href="{% url 'shop:section' 'memberships' %}">🎫 Абонементы</a>
+    <a class="seg {% if section == 'personal' %}is-active{% endif %}" href="{% url 'shop:section' 'personal' %}">👤 Персональные</a>
+    <a class="seg {% if section == 'group' %}is-active{% endif %}" href="{% url 'shop:section' 'group' %}">🧘 Групповые</a>
+    <a class="seg {% if section == 'other' %}is-active{% endif %}" href="{% url 'shop:section' 'other' %}">✨ Прочее</a>
+  </div>
+
+  {% for row in categories %}
+    <div class="cat-title">{{ row.cat.name }}</div>
+
+    <div class="grid">
+      {% for p in row.products %}
+        <div class="p-card">
+          <div class="p-img">
+            {% if p.image %}<img src="{{ p.image.url }}" alt="">{% endif %}
+            {% if p.badge %}<div class="p-badge">{{ p.badge }}</div>{% endif %}
+          </div>
+
+          <div class="p-body">
+            <div>
+              <div class="p-title">{{ p.name }}</div>
+              {% if p.subtitle %}
+                <div class="p-sub" style="margin-top:4px;">{{ p.subtitle }}</div>
+              {% else %}
+                <div class="p-sub" style="margin-top:4px;">&nbsp;</div>
+              {% endif %}
+            </div>
+
+            <div class="p-row">
+              <div class="p-price">{% if p.price_rub %}{{ p.price_rub }} ₽{% else %}0 ₽{% endif %}</div>
+              <div class="p-meta">{% if p.is_trial %}Пробное{% else %}Доступно{% endif %}</div>
+            </div>
+
+            <div class="p-actions">
+              <a class="btn btn--muted" style="border-radius:16px; padding:12px 10px;" href="{% url 'shop:cart_add' p.id %}">В корзину</a>
+              <a class="btn btn--primary" style="border-radius:16px; padding:12px 10px;" href="{% url 'shop:buy_now' p.id %}">Купить</a>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% empty %}
+    <div class="card" style="text-align:center; margin-top:12px;">
+      <div class="muted" style="font-weight:900;">В этом разделе пока нет товаров</div>
+    </div>
+  {% endfor %}
+
+  {% if cart.count %}
+    <div class="card" style="margin-top:14px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+      <div>
+        <div style="font-weight:900;">Корзина: {{ cart.count }} шт.</div>
+        <div class="muted" style="font-weight:800; margin-top:2px;">Итого: {{ cart.total_rub }} ₽</div>
+      </div>
+      <a class="btn btn--primary" style="border-radius:16px; padding:12px 14px;" href="{% url 'shop:cart' %}">Оформить</a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

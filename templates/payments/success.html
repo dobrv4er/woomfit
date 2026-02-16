@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Оплата успешна — WOOM FIT{% endblock %}
+{% block content %}
+  <div class="card" style="text-align:center;">
+    <div style="font-size:56px;">✅</div>
+    <div style="font-weight:900; font-size:22px; margin-top:8px;">Оплата прошла успешно</div>
+    <div class="muted" style="margin-top:8px;">Если это абонемент/услуга — он появится в профиле после обработки.</div>
+    <div style="margin-top:14px;">
+      <a class="btn btn--primary" href="{% url 'core:home' %}">На главную</a>
+    </div>
+  </div>
+{% endblock %}

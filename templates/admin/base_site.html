@@ -1,0 +1,18 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'css/admin_pink.css' %}">
+{% endblock %}
+
+{% block branding %}
+  <h1 id="site-name">
+    <a href="{% url 'admin:index' %}">WOOM FIT — Админка</a>
+  </h1>
+{% endblock %}
+
+{% block nav-global %}
+  {{ block.super }}
+  <a href="{% url 'crm_planning' %}" class="pink-navbtn">Планирование</a>
+{% endblock %}

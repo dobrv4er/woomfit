@@ -1,0 +1,570 @@
+{% extends "base.html" %}
+{% block title %}Расписание — WOOM FIT{% endblock %}
+
+{% block content %}
+<style>
+  .addr-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .addr-btn{
+    width:100%;
+    padding:12px 12px;
+    border-radius:16px;
+    text-align:center;
+    white-space:normal;
+    line-height:1.15;
+    font-weight:900;
+  }
+
+  .date-card{position:relative;}
+  .month-overlay{
+    position:absolute;
+    left:14px;
+    top:10px;
+    font-weight:900;
+    color:#9aa0a6;
+    text-transform:lowercase;
+    pointer-events:none;
+    z-index:2;
+  }
+
+  .days-strip{
+    display:flex;
+    gap:14px;
+    overflow-x:auto;
+    overflow-y:hidden;
+    padding:28px 6px 6px 76px;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x;
+    position:relative;
+    z-index:1;
+  }
+  .days-strip::-webkit-scrollbar{display:none;}
+
+  .day-card{
+    flex: 0 0 auto;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    min-width:72px;
+    height:72px;
+    border-radius:18px;
+    background:#fff;
+    box-shadow: 0 10px 18px rgba(0,0,0,0.10);
+    font-weight:900;
+    user-select:none;
+    -webkit-user-select:none;
+    -webkit-touch-callout:none;
+    text-decoration:none;
+    color:inherit;
+  }
+  .day-card--active{
+    background:#ff4f8f;
+    color:#fff;
+    box-shadow: 0 12px 22px rgba(255,79,143,0.30);
+  }
+  .dw{font-size:12px; letter-spacing:0.6px; opacity:0.9;}
+  .dn{font-size:26px; line-height:1;}
+  .day-card--active .dw{opacity:1;}
+
+  .card{padding:14px;}
+
+  .item.flash {
+    outline: 3px solid rgba(255,79,143,0.55);
+    box-shadow: 0 14px 26px rgba(255,79,143,0.22);
+    border-radius: 18px;
+  }
+
+  .loading-mask{
+    opacity:0.55;
+    pointer-events:none;
+    filter:saturate(0.7);
+  }
+
+  /* ===== Booking notice modal (ONLY THIS) ===== */
+  #bookingNoticeBackdrop{
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.55);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    padding: 16px;
+  }
+  #bookingNoticeBackdrop.is-open{ display: flex; }
+
+  #bookingNoticeModal{
+    width: min(560px, 100%);
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    padding: 18px 18px 14px;
+  }
+  #bookingNoticeTitle{
+    font-size: 18px;
+    font-weight: 900;
+    margin: 0 0 8px;
+  }
+  #bookingNoticeText{
+    font-size: 15px;
+    line-height: 1.45;
+    margin: 0 0 14px;
+  }
+  #bookingNoticeRow{
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  #bookingNoticeTimer{ font-size: 13px; opacity: .75; }
+  #bookingNoticeBtn{
+    border: 0;
+    border-radius: 12px;
+    padding: 10px 14px;
+    font-weight: 900;
+    cursor: pointer;
+    opacity: .6;
+  }
+  #bookingNoticeBtn.is-enabled{ opacity: 1; }
+</style>
+
+{% if locations %}
+  <div class="card">
+    <div class="muted" style="font-weight:900; margin-bottom:10px;">адрес</div>
+    <div class="addr-grid" id="addrGrid">
+      {% for l in locations %}
+        <a class="btn {% if l == selected_location %}btn--primary{% else %}btn--ghost{% endif %} addr-btn js-addr"
+           data-loc="{{ l }}"
+           href="?day={{ selected|date:'Y-m-d' }}&loc={{ l|urlencode }}#sessions">
+          {{ l }}
+        </a>
+      {% endfor %}
+    </div>
+  </div>
+  <div style="height:12px;"></div>
+{% endif %}
+
+<div class="card date-card">
+  <div id="monthOverlay" class="month-overlay">—</div>
+
+  <div id="dayStrip"
+       class="days-strip"
+       data-selected="{{ selected|date:'Y-m-d' }}"
+       data-loc="{{ selected_location|default:'' }}"
+       data-start="{{ strip_start }}"
+       data-end="{{ strip_end }}">
+    {% for d in days %}
+      <a class="day-card {% if d.date == selected %}day-card--active{% endif %}"
+         data-date="{{ d.date|date:'Y-m-d' }}"
+         href="?day={{ d.date|date:'Y-m-d' }}{% if selected_location %}&loc={{ selected_location|urlencode }}{% endif %}#sessions">
+        <div class="dw">{{ d.date|date:"D"|upper }}</div>
+        <div class="dn">{{ d.date|date:"j" }}</div>
+      </a>
+    {% endfor %}
+  </div>
+</div>
+
+<div style="height:12px;"></div>
+<div id="sessions"></div>
+
+<div id="sessionsContainer">
+  {% include "schedule/_sessions.html" %}
+</div>
+
+<!-- Booking notice modal -->
+<div id="bookingNoticeBackdrop" aria-hidden="true">
+  <div id="bookingNoticeModal" role="dialog" aria-modal="true" aria-labelledby="bookingNoticeTitle">
+    <div id="bookingNoticeTitle">Важно</div>
+    <div id="bookingNoticeText">Отмена записи возможна не позднее чем за 2 часа до начала тренировки.</div>
+    <div id="bookingNoticeRow">
+      <div id="bookingNoticeTimer">Можно закрыть через 5 сек.</div>
+      <button id="bookingNoticeBtn" type="button" disabled>Понятно</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const strip = document.getElementById("dayStrip");
+  const monthOverlay = document.getElementById("monthOverlay");
+  const sessionsContainer = document.getElementById("sessionsContainer");
+  if (!strip || !monthOverlay || !sessionsContainer) return;
+
+  let currentDay = strip.dataset.selected;
+  let currentLoc = strip.dataset.loc || "";
+
+  const stateKey = "woomfit_daystrip_state_global";
+  const fmtMonth = new Intl.DateTimeFormat("ru-RU", { month: "long" });
+  const fmtWeekday = new Intl.DateTimeFormat("ru-RU", { weekday: "short" });
+
+  function buildHref(dayIso, loc){
+    const url = new URL(window.location.href);
+    url.searchParams.set("day", dayIso);
+    if (loc) url.searchParams.set("loc", loc);
+    else url.searchParams.delete("loc");
+    url.hash = "sessions";
+    return url.toString();
+  }
+
+  function isoToDate(iso){
+    const [y,m,d] = iso.split("-").map(Number);
+    return new Date(y, m-1, d);
+  }
+  function dateToIso(dt){
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth()+1).padStart(2,"0");
+    const d = String(dt.getDate()).padStart(2,"0");
+    return `${y}-${m}-${d}`;
+  }
+
+  function createDayEl(dayIso){
+    const dt = isoToDate(dayIso);
+    const a = document.createElement("a");
+    a.className = "day-card" + (dayIso === currentDay ? " day-card--active" : "");
+    a.dataset.date = dayIso;
+    a.href = buildHref(dayIso, currentLoc);
+
+    const wd = fmtWeekday.format(dt).replace(".", "").toUpperCase();
+    const dn = String(dt.getDate());
+
+    a.innerHTML = `
+      <div class="dw">${wd}</div>
+      <div class="dn">${dn}</div>
+    `.trim();
+
+    return a;
+  }
+
+  function updateMonthOverlay(){
+    const leftEdge = strip.scrollLeft + 4;
+    const children = Array.from(strip.children);
+    let pick = children[0];
+    for (const el of children){
+      if (el.offsetLeft + el.offsetWidth >= leftEdge){
+        pick = el; break;
+      }
+    }
+    const iso = pick?.dataset?.date;
+    if (!iso) return;
+    monthOverlay.textContent = fmtMonth.format(isoToDate(iso)).toLowerCase();
+  }
+
+  function setActiveDay(iso){
+    currentDay = iso;
+    strip.dataset.selected = iso;
+    strip.querySelectorAll(".day-card").forEach(el=>{
+      el.classList.toggle("day-card--active", el.dataset.date === iso);
+    });
+  }
+
+  function setActiveLoc(loc){
+    currentLoc = loc || "";
+    strip.dataset.loc = currentLoc;
+    document.querySelectorAll(".js-addr").forEach(a=>{
+      const isActive = (a.dataset.loc || "") === currentLoc;
+      a.classList.toggle("btn--primary", isActive);
+      a.classList.toggle("btn--ghost", !isActive);
+    });
+  }
+
+  function saveStripState(){
+    try{
+      sessionStorage.setItem(stateKey, JSON.stringify({
+        start: strip.dataset.start,
+        end: strip.dataset.end,
+        scrollLeft: strip.scrollLeft
+      }));
+    }catch(e){}
+  }
+
+  function restoreStripState(){
+    try{
+      const raw = sessionStorage.getItem(stateKey);
+      if (!raw) return false;
+      const st = JSON.parse(raw);
+      if (!st || !st.start || !st.end) return false;
+
+      strip.scrollLeft = Number(st.scrollLeft || 0);
+      return true;
+    }catch(e){ return false; }
+  }
+
+  const EXTEND_BY = 14;
+  const EDGE_PX = 120;
+  let extending = false;
+
+  function prependDays(){
+    const first = strip.firstElementChild;
+    if (!first) return;
+
+    const beforeLeft = first.getBoundingClientRect().left;
+
+    let startIso = strip.dataset.start;
+    let startDt = isoToDate(startIso);
+
+    const toAdd = [];
+    for (let i = EXTEND_BY; i >= 1; i--){
+      const dt = new Date(startDt);
+      dt.setDate(dt.getDate() - i);
+      toAdd.push(dateToIso(dt));
+    }
+
+    const frag = document.createDocumentFragment();
+    toAdd.forEach(iso => frag.appendChild(createDayEl(iso)));
+    strip.insertBefore(frag, first);
+
+    const newStart = new Date(startDt);
+    newStart.setDate(newStart.getDate() - EXTEND_BY);
+    strip.dataset.start = dateToIso(newStart);
+
+    const afterLeft = first.getBoundingClientRect().left;
+    strip.scrollLeft += (afterLeft - beforeLeft);
+
+    saveStripState();
+  }
+
+  function appendDays(){
+    let endIso = strip.dataset.end;
+    let endDt = isoToDate(endIso);
+
+    const frag = document.createDocumentFragment();
+    for (let i = 1; i <= EXTEND_BY; i++){
+      const dt = new Date(endDt);
+      dt.setDate(dt.getDate() + i);
+      frag.appendChild(createDayEl(dateToIso(dt)));
+    }
+    strip.appendChild(frag);
+
+    const newEnd = new Date(endDt);
+    newEnd.setDate(newEnd.getDate() + EXTEND_BY);
+    strip.dataset.end = dateToIso(newEnd);
+
+    saveStripState();
+  }
+
+  function ensureInfiniteStrip(){
+    if (extending) return;
+
+    const nearLeft = strip.scrollLeft < EDGE_PX;
+    const nearRight = (strip.scrollWidth - (strip.scrollLeft + strip.clientWidth)) < EDGE_PX;
+
+    if (!nearLeft && !nearRight) return;
+
+    extending = true;
+    try{
+      if (nearLeft) prependDays();
+      if (nearRight) appendDays();
+      updateMonthOverlay();
+    } finally {
+      extending = false;
+    }
+  }
+
+  // --- AJAX подгрузка занятий ---
+  let inflight = null;
+
+  async function loadSessions({day, loc, push=true}){
+    if (!day) day = currentDay;
+    if (loc === undefined) loc = currentLoc;
+
+    if (inflight) inflight.abort();
+    inflight = new AbortController();
+
+    sessionsContainer.classList.add("loading-mask");
+
+    const url = new URL(window.location.origin + "{% url 'schedule:fragment' %}");
+    url.searchParams.set("day", day);
+    if (loc) url.searchParams.set("loc", loc);
+
+    try{
+      const resp = await fetch(url.toString(), {
+        method: "GET",
+        headers: {"X-Requested-With": "fetch"},
+        signal: inflight.signal
+      });
+      if (!resp.ok) throw new Error("bad response");
+      const html = await resp.text();
+
+      sessionsContainer.innerHTML = html;
+
+      setActiveDay(day);
+      setActiveLoc(loc);
+
+      const pageUrl = new URL(window.location.href);
+      pageUrl.searchParams.set("day", day);
+      if (loc) pageUrl.searchParams.set("loc", loc);
+      else pageUrl.searchParams.delete("loc");
+      pageUrl.hash = "sessions";
+
+      if (push) history.pushState({day, loc}, "", pageUrl.toString());
+      else history.replaceState({day, loc}, "", pageUrl.toString());
+
+      highlightFromHash();
+
+    }catch(e){
+      if (e.name !== "AbortError") console.error(e);
+    }finally{
+      sessionsContainer.classList.remove("loading-mask");
+      saveStripState();
+    }
+  }
+
+  function highlightFromHash(){
+    const hash = window.location.hash || "";
+    if (!hash.startsWith("#session-")) return;
+    const el = document.querySelector(hash);
+    if (!el) return;
+    setTimeout(() => {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("flash");
+      setTimeout(() => el.classList.remove("flash"), 1200);
+    }, 60);
+  }
+
+  // --- клики по адресу/дате вместо полной перезагрузки ---
+  let isPointerDown = false;
+  let dragStarted = false;
+  let startX = 0;
+  let startScroll = 0;
+
+  strip.addEventListener("pointerdown", (e) => {
+    isPointerDown = true;
+    dragStarted = false;
+    startX = e.clientX;
+    startScroll = strip.scrollLeft;
+  }, {passive:true});
+
+  strip.addEventListener("pointermove", (e) => {
+    if (!isPointerDown) return;
+    const dx = e.clientX - startX;
+    if (!dragStarted && Math.abs(dx) > 6) dragStarted = true;
+    if (dragStarted){
+      strip.scrollLeft = startScroll - dx;
+      e.preventDefault();
+    }
+  }, {passive:false});
+
+  strip.addEventListener("pointerup", () => {
+    isPointerDown = false;
+    setTimeout(() => { dragStarted = false; }, 0);
+  });
+
+  strip.addEventListener("click", (e) => {
+    const a = e.target.closest(".day-card");
+    if (!a) return;
+
+    if (dragStarted) { e.preventDefault(); e.stopPropagation(); return; }
+
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+
+    e.preventDefault();
+    saveStripState();
+    loadSessions({day: a.dataset.date, loc: currentLoc, push: true});
+  }, true);
+
+  document.querySelectorAll(".js-addr").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+      e.preventDefault();
+      saveStripState();
+      loadSessions({day: currentDay, loc: btn.dataset.loc || "", push: true});
+    }, true);
+  });
+
+  window.addEventListener("popstate", () => {
+    const p = new URL(window.location.href).searchParams;
+    const day = p.get("day") || currentDay;
+    const loc = p.get("loc") || "";
+    loadSessions({day, loc, push: false});
+  });
+
+  let ticking = false;
+  strip.addEventListener("scroll", () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => {
+      ensureInfiniteStrip();
+      updateMonthOverlay();
+      saveStripState();
+      ticking = false;
+    });
+  }, {passive:true});
+
+  restoreStripState();
+  updateMonthOverlay();
+  ensureInfiniteStrip();
+  highlightFromHash();
+})();
+</script>
+
+<script>
+/* Booking notice show by ?notice=booked|unbooked */
+(function(){
+  const backdrop = document.getElementById("bookingNoticeBackdrop");
+  const btn = document.getElementById("bookingNoticeBtn");
+  const timerEl = document.getElementById("bookingNoticeTimer");
+  const textEl = document.getElementById("bookingNoticeText");
+  const titleEl = document.getElementById("bookingNoticeTitle");
+  if (!backdrop || !btn || !timerEl || !textEl || !titleEl) return;
+
+  let lockUntil = 0;
+  let tick = null;
+
+  function openNotice(){
+    backdrop.classList.add("is-open");
+    backdrop.setAttribute("aria-hidden", "false");
+
+    btn.disabled = true;
+    btn.classList.remove("is-enabled");
+
+    lockUntil = Date.now() + 5000;
+
+    if (tick) clearInterval(tick);
+    tick = setInterval(() => {
+      const left = lockUntil - Date.now();
+      if (left <= 0){
+        clearInterval(tick);
+        tick = null;
+        timerEl.textContent = "Теперь можно закрыть.";
+        btn.disabled = false;
+        btn.classList.add("is-enabled");
+        return;
+      }
+      timerEl.textContent = `Можно закрыть через ${Math.ceil(left/1000)} сек.`;
+    }, 200);
+  }
+
+  function closeNotice(){
+    if (Date.now() < lockUntil) return;
+    backdrop.classList.remove("is-open");
+    backdrop.setAttribute("aria-hidden", "true");
+  }
+
+  btn.addEventListener("click", closeNotice);
+  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeNotice(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeNotice(); });
+
+  const url = new URL(window.location.href);
+  const notice = url.searchParams.get("notice");
+
+  // ✅ ТУТ РАЗНЫЕ ТЕКСТЫ
+  if (notice === "booked"){
+    titleEl.textContent = "Важно";
+    textEl.textContent = "Отмена записи возможна не позднее чем за 2 часа до начала тренировки.";
+    openNotice();
+  } else if (notice === "unbooked"){
+    titleEl.textContent = "Запись отменена";
+    textEl.textContent = "Вы отменили запись. Ждём вас на других тренировках!";
+    openNotice();
+  }
+
+  // убрать параметр, чтобы не открывалось снова при обновлении
+  if (notice){
+    url.searchParams.delete("notice");
+    history.replaceState(history.state, "", url.toString());
+  }
+})();
+</script>
+
+{% endblock %}
