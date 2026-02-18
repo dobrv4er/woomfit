@@ -67,16 +67,22 @@ docker compose up -d --build
 ```
 
 ### 3) Выпустите сертификат
+macOS/Linux (bash):
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.https.yml run --rm certbot certonly \
+docker compose --profile certbot -f docker-compose.yml -f docker-compose.https.yml run --rm certbot certonly \
   --webroot -w /var/www/certbot \
   -d ваш-домен.ru \
   --email you@example.com --agree-tos --no-eff-email
 ```
 
+Windows (PowerShell, в одну строку):
+```powershell
+docker compose --profile certbot -f docker-compose.yml -f docker-compose.https.yml run --rm certbot certonly --webroot -w /var/www/certbot -d ваш-домен.ru --email you@example.com --agree-tos --no-eff-email
+```
+
 ### 4) Включите HTTPS nginx
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.https.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.https.yml up -d db web nginx
 ```
 
 После этого сайт будет доступен по `https://ваш-домен.ru`.
@@ -84,8 +90,18 @@ docker compose -f docker-compose.yml -f docker-compose.https.yml up -d
 
 ### 5) Продление сертификата
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.https.yml run --rm certbot renew
+docker compose --profile certbot -f docker-compose.yml -f docker-compose.https.yml run --rm certbot renew
 docker compose -f docker-compose.yml -f docker-compose.https.yml exec nginx nginx -s reload
+```
+
+### Если сертификат уже выдан у регистратора/хостинга
+Скопируйте файлы в:
+- `certbot/conf/live/ваш-домен.ru/privkey.pem`
+- `certbot/conf/live/ваш-домен.ru/fullchain.pem`
+
+После этого поднимайте только рабочие сервисы:
+```bash
+docker compose -f docker-compose.yml -f docker-compose.https.yml up -d db web nginx
 ```
 
 По умолчанию демо‑данные не загружаются.  
