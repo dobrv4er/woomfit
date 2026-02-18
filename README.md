@@ -55,8 +55,8 @@ docker compose logs db --tail=200
 ### 1) Подготовьте `.env` для прода
 ```env
 DJANGO_DEBUG=0
-DJANGO_ALLOWED_HOSTS=ваш-домен.ru,www.ваш-домен.ru
-DJANGO_CSRF_TRUSTED_ORIGINS=https://ваш-домен.ru,https://www.ваш-домен.ru
+DJANGO_ALLOWED_HOSTS=ваш-домен.ru
+DJANGO_CSRF_TRUSTED_ORIGINS=https://ваш-домен.ru
 NGINX_HTTP_PORT=80
 SSL_DOMAIN=ваш-домен.ru
 ```
@@ -70,7 +70,7 @@ docker compose up -d --build
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.https.yml run --rm certbot certonly \
   --webroot -w /var/www/certbot \
-  -d ваш-домен.ru -d www.ваш-домен.ru \
+  -d ваш-домен.ru \
   --email you@example.com --agree-tos --no-eff-email
 ```
 
