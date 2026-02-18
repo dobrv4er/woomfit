@@ -13,6 +13,7 @@ build/
 # Environments
 .env
 .env.*
+!.env.example
 venv/
 .venv/
 ENV/
@@ -21,6 +22,8 @@ ENV/
 *.log
 staticfiles/
 media/
+certbot/conf/
+certbot/www/
 
 # IDE / OS
 .idea/
