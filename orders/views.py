@@ -6,7 +6,10 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.shortcuts import render, redirect
 from django.urls import reverse
+from django.utils import timezone
 
+from core.legal import client_ip, is_checked
+from payments.receipt import build_receipt, receipt_item
 from payments.tbank import TBankClient
 from shop.cart import Cart
 from shop.models import Product
@@ -23,8 +26,6 @@ def _build_tbank_receipt_for_order(request, order: Order, cart_items: list, tota
     Receipt is required if online-cashbox is enabled on the terminal.
     Amount must equal sum(Items.Amount).
     """
-    email = (getattr(order.user, "email", "") or "").strip() or "client@example.com"
-
     receipt_items = []
     sum_items = 0
     for it in cart_items:
@@ -33,37 +34,54 @@ def _build_tbank_receipt_for_order(request, order: Order, cart_items: list, tota
         price_kopeks = int(it.price_rub) * 100
         amount = price_kopeks * qty
         sum_items += amount
-        receipt_items.append(
-            {
-                "Name": str(it.name)[:128],
-                "Price": price_kopeks,
-                "Quantity": qty,
-                "Amount": amount,
-                "Tax": settings.TBANK_ITEM_TAX,
-            }
-        )
+        receipt_items.append(receipt_item(name=it.name, price_kopeks=price_kopeks, quantity=qty, amount_kopeks=amount))
 
     # Safety: if rounding/discounts appear later, keep Receipt consistent with Amount.
     if sum_items != int(total_kopeks):
         receipt_items = [
-            {
-                "Name": f"Заказ №{order.id}",
-                "Price": int(total_kopeks),
-                "Quantity": 1,
-                "Amount": int(total_kopeks),
-                "Tax": settings.TBANK_ITEM_TAX,
-            }
+            receipt_item(name=f"Заказ №{order.id}", price_kopeks=int(total_kopeks), quantity=1, amount_kopeks=int(total_kopeks))
         ]
 
-    return {
-        "Email": email,
-        "Taxation": settings.TBANK_TAXATION,
-        "Items": receipt_items,
-    }
+    return build_receipt(order.user, receipt_items)
+
+
+def _cart_purchase_summary(cart_items: list, *, max_items: int = 5, max_len: int = 140) -> str:
+    if not cart_items:
+        return ""
+
+    parts = []
+    for it in cart_items[:max_items]:
+        qty = int(it.qty or 0)
+        name = (it.name or "").strip() or "Товар"
+        parts.append(f"{name} x{qty}")
+    if len(cart_items) > max_items:
+        parts.append(f"+{len(cart_items) - max_items} поз.")
+
+    summary = ", ".join(parts).strip()
+    if len(summary) <= max_len:
+        return summary
+    return summary[: max_len - 1].rstrip() + "…"
+
+
+def _checkout_legal_ok(request) -> bool:
+    offer_ok = is_checked(request, "agree_offer")
+    pd_ok = is_checked(request, "agree_personal_data")
+    if not offer_ok or not pd_ok:
+        messages.error(
+            request,
+            "Для оплаты необходимо принять публичную оферту и согласие на обработку персональных данных.",
+        )
+        return False
+    return True
 
 
 @login_required
 def checkout(request):
+    if request.method != "POST":
+        return redirect("shop:cart")
+    if not _checkout_legal_ok(request):
+        return redirect("shop:cart")
+
     cart = Cart(request)
     items = list(cart)
     if not items:
@@ -74,7 +92,13 @@ def checkout(request):
 
     total = sum(int(it.total_price_rub) for it in items)
 
-    order = Order.objects.create(user=request.user, total_rub=total, status="new")
+    order = Order.objects.create(
+        user=request.user,
+        total_rub=total,
+        status="new",
+        legal_accepted_at=timezone.now(),
+        legal_accept_ip=client_ip(request),
+    )
     for it in items:
         prod = products_by_id.get(int(it.product_id))
         OrderItem.objects.create(
@@ -138,6 +162,8 @@ def checkout_wallet(request):
     """
     if request.method != "POST":
         return redirect("shop:cart")
+    if not _checkout_legal_ok(request):
+        return redirect("shop:cart")
 
     cart = Cart(request)
     items = list(cart)
@@ -156,7 +182,13 @@ def checkout_wallet(request):
         return redirect("shop:cart")
 
     # Создаём заказ
-    order = Order.objects.create(user=request.user, total_rub=total, status="new")
+    order = Order.objects.create(
+        user=request.user,
+        total_rub=total,
+        status="new",
+        legal_accepted_at=timezone.now(),
+        legal_accept_ip=client_ip(request),
+    )
     for it in items:
         prod = products_by_id.get(int(it.product_id))
         OrderItem.objects.create(
@@ -177,7 +209,9 @@ def checkout_wallet(request):
         return redirect("payments:success")
 
     try:
-        debit(request.user, Decimal(str(total)), reason=f"Оплата заказа #{order.id} (магазин)")
+        purchase_summary = _cart_purchase_summary(items)
+        reason = f"Оплата заказа #{order.id}: {purchase_summary}" if purchase_summary else f"Оплата заказа #{order.id}"
+        debit(request.user, Decimal(str(total)), reason=reason)
     except ValidationError as e:
         # Если дебет не прошёл — отменяем заказ и возвращаем корзину
         order.status = "canceled"

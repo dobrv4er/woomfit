@@ -528,7 +528,7 @@
             {% for b in blocks %}
               {% with cls=forloop.counter|add:0 %}
               <a class="crm-block
-                {% if "Персон" in b.title %}kind-personal{% elif "Аренда" in b.title %}kind-rent{% else %}kind-group{% endif %}"
+                {% if b.kind == "personal" %}kind-personal{% elif b.kind == "rent" %}kind-rent{% else %}kind-group{% endif %}"
                 href="{{ b.edit_url }}"
                 data-title="{{ b.title }}"
                 data-trainer="{{ b.trainer }}"
@@ -538,7 +538,15 @@
                 style="top: {{ b.top_px }}px; height: {{ b.height_px }}px;">
                 <span class="drag-handle" title="Перетащить">⠿</span>
                 <div class="t1">{{ b.hhmm }}–{{ b.end_hhmm }} • {{ b.title }}</div>
-                <div class="t2">{% if b.trainer %}{{ b.trainer }}{% else %}—{% endif %}</div>
+                <div class="t2">
+                  {% if b.kind == "rent" %}
+                    Оплаченная бронь
+                  {% elif b.trainer %}
+                    {{ b.trainer }}
+                  {% else %}
+                    —
+                  {% endif %}
+                </div>
 
               </a>
               {% endwith %}
@@ -780,7 +788,9 @@ async function onPointerUp(e){
     if (resp && resp.ok){
       window.location.reload();
     } else {
-      alert("Не удалось переместить: " + (resp && resp.error ? resp.error : "unknown"));
+      const details = Array.isArray(resp && resp.messages) ? resp.messages.join(" ") : "";
+      const fallback = (resp && resp.error) ? resp.error : "unknown";
+      alert("Не удалось переместить: " + (details || fallback));
     }
   } finally {
     if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
@@ -790,93 +800,6 @@ async function onPointerUp(e){
 }
 
 document.addEventListener("pointerdown", onPointerDown, true);
-
-
-  function postMove(sessionId, day, start, loc){
-    const csrftoken = getCookie("csrftoken");
-    return fetch(moveUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type":"application/json",
-        "X-CSRFToken": csrftoken,
-      },
-      body: JSON.stringify({ session_id: sessionId, day, start, loc })
-    }).then(r=>r.json());
-  }
-
-  function onPointerDown(e){
-    // ✅ только если нажали на ручку
-    const handle = e.target.closest(".drag-handle");
-    if (!handle) return;
-
-    const a = handle.closest(".crm-block");
-    if (!a) return;
-
-    if (e.button !== undefined && e.button !== 0) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    const colBody = a.closest(".crm-colbody");
-    const sessionId = a.getAttribute("data-session-id");
-    const dur = Number(a.getAttribute("data-duration") || "50");
-    const heightPx = Math.max(20, dur * pxPerMin);
-
-    dragging = { a, colBody, sessionId, dur, heightPx };
-    ghost = createGhost(colBody, heightPx);
-
-    onPointerMove(e);
-    document.addEventListener("pointermove", onPointerMove, true);
-    document.addEventListener("pointerup", onPointerUp, true);
-  }
-
-  function onPointerMove(e){
-    if (!dragging || !ghost) return;
-    const colBody = dragging.colBody;
-
-    const rect = colBody.getBoundingClientRect();
-    let y = e.clientY - rect.top;
-    y = clamp(y, 0, rect.height);
-
-    const minsFromGrid = roundTo10(y / pxPerMin);
-    const maxMins = (gridEndH - gridStartH) * 60 - dragging.dur;
-    const clampedMins = clamp(minsFromGrid, 0, maxMins);
-    ghost.style.top = (clampedMins * pxPerMin) + "px";
-  }
-
-  async function onPointerUp(e){
-    document.removeEventListener("pointermove", onPointerMove, true);
-    document.removeEventListener("pointerup", onPointerUp, true);
-
-    try{
-      if (!dragging || !ghost) return;
-
-      const colBody = dragging.colBody;
-      const rect = colBody.getBoundingClientRect();
-      let y = e.clientY - rect.top;
-      y = clamp(y, 0, rect.height);
-
-      let minsFromGrid = roundTo10(y / pxPerMin);
-      const maxMins = (gridEndH - gridStartH) * 60 - dragging.dur;
-      minsFromGrid = clamp(minsFromGrid, 0, maxMins);
-
-      const start = minsToHHMM(gridStartH*60 + minsFromGrid);
-      const loc = colBody.getAttribute("data-loc") || "";
-
-      const resp = await postMove(dragging.sessionId, dayIso, start, loc);
-      if (resp && resp.ok){
-        window.location.reload();
-      }else{
-        alert("Не удалось переместить: " + (resp && resp.error ? resp.error : "unknown"));
-      }
-    } finally {
-      if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
-      ghost = null;
-      dragging = null;
-    }
-  }
-
-  document.addEventListener("pointerdown", onPointerDown, true);
 
   // --------------------
   // Navigation hotkeys: [ and ]

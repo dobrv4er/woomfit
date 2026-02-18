@@ -70,6 +70,8 @@
                 <div class="msub">
                   {% if m.kind == 'visits' %}
                     Осталось посещений: {{ m.left_visits|default:"∞" }}
+                  {% elif m.is_pending_activation and m.validity_days %}
+                    {{ m.validity_days }} дн. с первого занятия
                   {% else %}
                     Активен по времени
                   {% endif %}

@@ -1,8 +1,11 @@
+from decimal import Decimal
+
 from django.contrib import messages
 from django.shortcuts import render, redirect, get_object_or_404
 
 from .cart import Cart
 from .models import Category, Product, TrialUse
+from wallet.services import get_wallet
 
 
 def _add_product_to_cart(request, product: Product):
@@ -114,7 +117,24 @@ def cart_view(request):
     products_by_id = {p.id: p for p in products}
     items = list(cart.items(products_by_id))
     total_rub = cart.total_rub(products_by_id)
-    return render(request, "shop/cart.html", {"items": items, "total_rub": total_rub})
+
+    wallet_balance = None
+    can_pay_wallet = False
+    if request.user.is_authenticated:
+        wallet = get_wallet(request.user)
+        wallet_balance = wallet.balance
+        can_pay_wallet = total_rub <= 0 or wallet_balance >= Decimal(str(total_rub))
+
+    return render(
+        request,
+        "shop/cart.html",
+        {
+            "items": items,
+            "total_rub": total_rub,
+            "wallet_balance": wallet_balance,
+            "can_pay_wallet": can_pay_wallet,
+        },
+    )
 
 
 def cart_set(request, product_id: int):

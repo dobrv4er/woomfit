@@ -2,31 +2,38 @@
 {% block title %}Новости — WOOM FIT{% endblock %}
 
 {% block content %}
-<h1 class="section-title">Новости</h1>
+<section class="news-feed">
+  <h1 class="news-feed__title">Спецпредложения</h1>
 
-<div class="news-grid">
-  {% for post in page.object_list %}
-    <a class="news-card"
-       href="{{ post.get_absolute_url }}"
-       style="--news-font: {{ post.font_css }}; --news-text: {{ post.text_color }}; --news-ovl-rgb: {{ post.overlay_rgb }}; --news-ovl-a: {{ post.overlay_alpha }};">
-      {% if post.cover %}
-        <img class="news-card__img" src="{{ post.cover.url }}" alt="">
-      {% else %}
-        <div class="news-card__img news-card__img--stub"></div>
-      {% endif %}
+  <div class="news-feed__list">
+    {% for post in page.object_list %}
+      <a class="news-feed-card" href="{{ post.get_absolute_url }}">
+        <div class="news-feed-card__media">
+          {% if post.cover %}
+            <img src="{{ post.cover.url }}" alt="">
+          {% else %}
+            <div class="news-feed-card__stub"></div>
+          {% endif %}
+          <span class="news-feed-card__share" aria-hidden="true">↗</span>
+        </div>
 
-      <div class="news-card__shade news-card__shade--{{ post.overlay_style }}"></div>
-      <div class="news-card__label">{{ post.card_text|upper }}</div>
-    </a>
-  {% empty %}
-    <div class="card" style="text-align:center;">
-      <div class="muted" style="font-weight:900;">Новостей пока нет</div>
-    </div>
-  {% endfor %}
-</div>
+        <div class="news-feed-card__body">
+          <h2 class="news-feed-card__title">{{ post.title }}</h2>
+          {% if post.body %}
+            <p class="news-feed-card__text">{{ post.body|striptags|truncatechars:100 }}</p>
+          {% endif %}
+        </div>
+      </a>
+    {% empty %}
+      <div class="card" style="text-align:center;">
+        <div class="muted" style="font-weight:900;">Новостей пока нет</div>
+      </div>
+    {% endfor %}
+  </div>
+</section>
 
 {% if page.paginator.num_pages > 1 %}
-  <div class="pager">
+  <div class="pager news-feed__pager">
     {% if page.has_previous %}
       <a class="btn btn--ghost" href="?page={{ page.previous_page_number }}">Назад</a>
     {% endif %}

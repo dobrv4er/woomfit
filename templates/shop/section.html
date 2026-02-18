@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 {% block title %}{{ section_label }} — WOOM FIT{% endblock %}
 
+{% block topbar_left %}
+  <a class="btn btn--ghost" style="padding:8px 10px; border-radius:14px;" href="{% url 'shop:menu' %}">←</a>
+{% endblock %}
+
 {% block topbar_right %}
   <a class="btn btn--ghost" style="padding:8px 10px; border-radius:14px;" href="{% url 'shop:cart' %}">
     🛒{% if cart.count %} ({{ cart.count }}){% endif %}
@@ -14,20 +18,10 @@
   .head{
     display:flex;
     align-items:flex-end;
-    justify-content:space-between;
     gap:12px;
     margin:6px 0 10px;
   }
   .head__t{font-weight:900;font-size:22px;letter-spacing:-0.02em;}
-  .head__back{
-    text-decoration:none;
-    font-weight:900;
-    color:var(--pink);
-    padding:10px 12px;
-    border-radius:14px;
-    background:#fff;
-    border:1px solid rgba(0,0,0,0.06);
-  }
 
   .segment{
     display:flex;
@@ -79,10 +73,12 @@
     background:#fff;
     border:1px solid rgba(0,0,0,0.06);
     border-radius:24px;
-    box-shadow:0 14px 34px rgba(15,23,42,0.06);
+    box-shadow:
+      0 4px 10px rgba(15,23,42,0.08),
+      0 14px 34px rgba(15,23,42,0.12);
     overflow:hidden;
     display:grid;
-    grid-template-columns: 110px 1fr;
+    grid-template-columns:110px 1fr;
     gap:12px;
     padding:12px;
   }
@@ -107,19 +103,51 @@
     font-size:12px;
   }
 
-  .p-body{min-width:0;display:flex;flex-direction:column;gap:8px;}
-  .p-title{font-weight:900;font-size:16px;line-height:1.1;letter-spacing:-0.01em;}
-  .p-sub{color:var(--muted);font-weight:800;font-size:12.5px;line-height:1.2;}
-  .p-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:auto;}
-  .p-price{font-weight:900;font-size:18px;}
-  .p-meta{color:#94a3b8;font-weight:900;font-size:12px;white-space:nowrap;}
-  .p-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;}
+  .p-body{
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .p-title{
+    font-weight:900;
+    font-size:18px;
+    line-height:1.1;
+    letter-spacing:-0.01em;
+  }
+  .p-sub{
+    color:var(--muted);
+    font-weight:800;
+    font-size:14px;
+    line-height:1.2;
+  }
+  .p-row{
+    margin-top:auto;
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:10px;
+  }
+  .p-price{
+    font-weight:900;
+    font-size:24px;
+  }
+  .p-meta{color:#94a3b8;font-weight:900;font-size:13px;white-space:nowrap;}
+  .p-actions{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    width:min(100%, 210px);
+    justify-content:end;
+    margin-left:auto;
+    gap:8px;
+    margin-top:10px;
+  }
+  .p-actions .btn{width:100%;}
 </style>
 
 <div class="shop-wrap">
   <div class="head">
     <div class="head__t">{{ section_label }}</div>
-    <a class="head__back" href="{% url 'shop:menu' %}">Назад</a>
   </div>
 
   <div class="segment">

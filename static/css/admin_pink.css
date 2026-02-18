@@ -1,11 +1,21 @@
 /* ===== WOOMFIT PINK ADMIN THEME (no packages) ===== */
 
 @font-face {
-  font-family: "Tilda Sans";
+  font-family: "Tilda Sans VF";
   src:
     url("/static/fonts/tilda/TildaSans-VF.woff2") format("woff2"),
     url("/static/fonts/tilda/TildaSans-VF.woff") format("woff");
   font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "TildaSans-Bold";
+  src:
+    url("/static/fonts/tilda/TildaSans-Bold.woff2") format("woff2"),
+    url("/static/fonts/tilda/TildaSans-Bold.woff") format("woff");
+  font-weight: 700 900;
   font-style: normal;
   font-display: swap;
 }
@@ -26,6 +36,8 @@
   --pinkSoft:rgba(255,79,143,.12);
   --border:#e5e7eb;
   --text:#111827;
+  --font-head: "TildaSans-Bold", "Tilda Sans VF", sans-serif;
+  --font-body: "Tilda Sans VF", sans-serif;
 }
 
 #header{
@@ -110,6 +122,5 @@ html, body,
 .crm-wrap,
 .admin-interface,
 * {
-  font-family: "Tilda Sans", -apple-system, BlinkMacSystemFont,
-               "Segoe UI", Roboto, Inter, Arial, sans-serif;
+  font-family: var(--font-body);
 }

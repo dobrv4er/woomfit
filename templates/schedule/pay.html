@@ -42,6 +42,22 @@
       <button class="btn btn--primary" type="submit" name="method" value="online">Перейти</button>
     </div>
 
+    <div style="height:12px;"></div>
+    <label style="display:flex; gap:8px; align-items:flex-start; font-weight:800; color:#334155; font-size:13px;">
+      <input type="checkbox" name="agree_offer" required style="width:16px; margin-top:2px;">
+      <span>
+        Принимаю <a href="{% url 'core:public_offer' %}" target="_blank" rel="noopener" style="color:var(--pink); font-weight:900;">публичную оферту</a> и
+        <a href="{% url 'core:refund_policy' %}" target="_blank" rel="noopener" style="color:var(--pink); font-weight:900;">условия оплаты/возврата</a>
+      </span>
+    </label>
+    <label style="display:flex; gap:8px; align-items:flex-start; font-weight:800; color:#334155; font-size:13px; margin-top:8px;">
+      <input type="checkbox" name="agree_personal_data" required style="width:16px; margin-top:2px;">
+      <span>
+        Даю согласие на обработку персональных данных:
+        <a href="{% url 'core:personal_data_consent' %}" target="_blank" rel="noopener" style="color:var(--pink); font-weight:900;">текст согласия</a>
+      </span>
+    </label>
+
     <div class="muted" style="text-align:center; margin-top:12px; font-weight:800;">
       Если вы купите абонемент в магазине, запись на групповые занятия будет без доплат.
     </div>

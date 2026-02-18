@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — WOOM FIT{% endblock %}
+{% block topbar_left %}
+  <a class="btn btn--ghost" style="padding:8px 10px; border-radius:14px;" href="javascript:history.back()">←</a>
+{% endblock %}
+{% block content %}
+  <h2 class="section-title">{{ title }}</h2>
+  <div class="card">
+    <div class="muted" style="font-weight:900;">{{ subtitle }}</div>
+  </div>
+
+  {% for section in sections %}
+    <div style="height:10px;"></div>
+    <div class="card">
+      <div style="font-weight:900;">{{ section.title }}</div>
+      <div style="height:8px;"></div>
+      <div class="list">
+        {% for ln in section.lines %}
+          <div class="muted" style="font-weight:800;">{{ ln }}</div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endfor %}
+{% endblock %}

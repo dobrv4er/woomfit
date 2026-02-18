@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, time
 from typing import Any
 from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import JsonResponse, HttpRequest
@@ -11,13 +12,13 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
-from django.views.decorators.http import require_POST
 from .models import Session
 
 
 @dataclass
 class Block:
     id: int
+    kind: str
     title: str
     trainer: str
     location: str
@@ -61,7 +62,61 @@ def _fmt_hhmm(dt: datetime, tz) -> str:
 
 
 def _normalize_loc(s: str) -> str:
-    return (s or "").strip().replace(" ", "")
+    return (s or "").strip().lower().replace("ё", "е").replace(" ", "")
+
+
+def _compact_ws(s: str | None) -> str:
+    return " ".join((s or "").split()).strip()
+
+
+def _location_norm_aliases(raw_loc: str) -> set[str]:
+    """
+    Допускаем частую опечатку 8б/86, чтобы не плодить "ложные" адреса.
+    """
+    norm = _normalize_loc(raw_loc)
+    if not norm:
+        return set()
+
+    aliases = {norm}
+    if norm.endswith("8б"):
+        aliases.add(norm[:-2] + "86")
+    if norm.endswith("86"):
+        aliases.add(norm[:-2] + "8б")
+    return aliases
+
+
+def _dedupe_locations(raw_locations) -> list[str]:
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for loc in raw_locations or []:
+        c = _compact_ws(str(loc))
+        if not c:
+            continue
+        n = _normalize_loc(c)
+        if n in seen:
+            continue
+        seen.add(n)
+        cleaned.append(c)
+    return cleaned
+
+
+def _canonical_location(raw_loc: str | None, known_locations: list[str]) -> str:
+    raw_clean = _compact_ws(raw_loc)
+    if not raw_clean:
+        return ""
+
+    by_norm: dict[str, str] = {}
+    for loc in known_locations:
+        c = _compact_ws(loc)
+        if not c:
+            continue
+        by_norm.setdefault(_normalize_loc(c), c)
+
+    for alias in _location_norm_aliases(raw_clean):
+        canonical = by_norm.get(alias)
+        if canonical:
+            return canonical
+    return raw_clean
 
 
 @staff_member_required
@@ -101,7 +156,7 @@ def planning(request: HttpRequest):
     from django.conf import settings
 
     raw_locations = getattr(settings, "WOOMFIT_LOCATIONS", None) or []
-    locations = [x.strip() for x in raw_locations if str(x).strip()]
+    locations = _dedupe_locations(raw_locations)
 
     # if settings empty, derive from db
     if not locations:
@@ -111,7 +166,7 @@ def planning(request: HttpRequest):
             .values_list("location", flat=True)
             .distinct()
         )
-        locations = [x for x in qs_loc if x]
+        locations = _dedupe_locations(qs_loc)
 
     # query sessions for that window
     qs = (
@@ -134,11 +189,13 @@ def planning(request: HttpRequest):
         top_px = int(mins_from_start * px_per_min)
         height_px = int((s.duration_min or 0) * px_per_min)
 
+        canonical_loc = _canonical_location(s.location, locations)
         b = Block(
             id=s.id,
+            kind=s.kind,
             title=s.title,
             trainer=getattr(s.trainer, "name", "") if s.trainer_id else "",
-            location=s.location or "",
+            location=canonical_loc or "",
             start_at=start_local,
             end_at=end_local,
             duration_min=s.duration_min or 0,
@@ -216,9 +273,18 @@ def session_move(request: HttpRequest):
     except Exception:
         return JsonResponse({"ok": False, "error": "bad_datetime"}, status=400)
 
+    from django.conf import settings
+
+    known_locations = _dedupe_locations(getattr(settings, "WOOMFIT_LOCATIONS", None) or [])
+    canonical_loc = _canonical_location(loc, known_locations) or _compact_ws(loc)
+
     s = get_object_or_404(Session, pk=session_id)
     s.start_at = new_dt
-    s.location = loc
+    s.location = canonical_loc
+    try:
+        s.full_clean()
+    except ValidationError as exc:
+        return JsonResponse({"ok": False, "error": "validation", "messages": exc.messages}, status=400)
     s.save(update_fields=["start_at", "location"])
 
     return JsonResponse({"ok": True})
@@ -277,6 +343,9 @@ def repeat_week(request):
     dst_end = dst_start + timedelta(days=7)
 
     from .models import Session
+    from django.conf import settings
+
+    known_locations = _dedupe_locations(getattr(settings, "WOOMFIT_LOCATIONS", None) or [])
 
     src_sessions = (
         Session.objects
@@ -322,7 +391,7 @@ def repeat_week(request):
             new_start = timezone.make_aware(new_naive, tz)
 
             new_dur = int(s.duration_min or 0)
-            new_loc = s.location or ""
+            new_loc = _canonical_location(s.location, known_locations) or ""
             new_trainer_id = s.trainer_id
 
             # защита: кратность 10 минутам (если хочешь строго)
@@ -346,9 +415,12 @@ def repeat_week(request):
             # создаём копию
             Session.objects.create(
                 title=s.title,
+                kind=s.kind,
+                workout=s.workout,
+                client=s.client,
                 start_at=new_start,
                 duration_min=s.duration_min,
-                location=s.location,
+                location=new_loc,
                 trainer_id=s.trainer_id,
                 capacity=s.capacity,
             )

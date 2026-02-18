@@ -52,16 +52,27 @@
       </div>
 
       <div style="margin-top:14px; display:grid; gap:10px;">
-        <form method="post" action="{% url 'orders:checkout' %}">
+        <form method="post" action="{% url 'orders:checkout' %}" style="display:grid; gap:10px;">
           {% csrf_token %}
+          <label style="display:flex; gap:8px; align-items:flex-start; font-weight:800; color:#334155; margin-bottom:8px; font-size:13px;">
+            <input type="checkbox" name="agree_offer" required style="width:16px; margin-top:2px;">
+            <span>
+              Принимаю <a href="{% url 'core:public_offer' %}" target="_blank" rel="noopener" style="color:var(--pink); font-weight:900;">публичную оферту</a> и
+              <a href="{% url 'core:refund_policy' %}" target="_blank" rel="noopener" style="color:var(--pink); font-weight:900;">условия оплаты/возврата</a>
+            </span>
+          </label>
+          <label style="display:flex; gap:8px; align-items:flex-start; font-weight:800; color:#334155; margin-bottom:10px; font-size:13px;">
+            <input type="checkbox" name="agree_personal_data" required style="width:16px; margin-top:2px;">
+            <span>
+              Даю согласие на обработку персональных данных:
+              <a href="{% url 'core:personal_data_consent' %}" target="_blank" rel="noopener" style="color:var(--pink); font-weight:900;">текст согласия</a>
+            </span>
+          </label>
           <button class="btn btn--primary btn--full" type="submit">Оплатить картой</button>
-        </form>
-
-        <form method="post" action="{% url 'orders:checkout_wallet' %}">
-          {% csrf_token %}
           <button
             class="btn btn--muted btn--full"
             type="submit"
+            formaction="{% url 'orders:checkout_wallet' %}"
             {% if not user.is_authenticated %}disabled{% endif %}
             {% if user.is_authenticated and not can_pay_wallet %}disabled{% endif %}
           >
@@ -74,19 +85,13 @@
 
         {% if not user.is_authenticated %}
           <div class="muted" style="text-align:center; font-weight:800;">
-            Чтобы оплатить кошельком, нужно <a href="{% url 'accounts:login' %}" style="color:var(--pink); font-weight:900;">войти</a>.
+            Чтобы оплатить кошельком, нужно <a href="{% url 'login' %}" style="color:var(--pink); font-weight:900;">войти</a>.
           </div>
         {% elif not can_pay_wallet and total_rub > 0 %}
           <div class="muted" style="text-align:center; font-weight:800;">
             Недостаточно средств в кошельке. Пополнить можно через товары «Пополнение кошелька».
           </div>
         {% endif %}
-      </div>
-
-      <div class="muted" style="text-align:center; margin-top:10px; font-weight:800;">
-        Нажимая на кнопку, вы соглашаетесь с
-        <a href="#" style="color:var(--pink); font-weight:900;">правилами</a> и
-        <a href="#" style="color:var(--pink); font-weight:900;">условиями использования</a>
       </div>
     </div>
   {% else %}

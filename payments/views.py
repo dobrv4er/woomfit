@@ -1,5 +1,9 @@
 import json
+import re
+from datetime import timedelta
+
 from django.conf import settings
+from django.db import transaction
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
@@ -7,12 +11,40 @@ from django.utils import timezone
 
 from decimal import Decimal
 
+from core.telegram_notify import (
+    notify_booking_created,
+    notify_order_payment,
+    notify_rent_request_paid,
+    notify_session_payment,
+)
 from orders.models import Order
 from orders.services import fulfill_order
 
 from loyalty.services import add_spent
 
-from schedule.models import PaymentIntent, Booking
+from schedule.models import PaymentIntent, Booking, RentPaymentIntent, RentRequest, Session, Trainer
+
+
+RENT_TRAINER_NAME = "Аренда зала"
+
+
+def _order_purchase_summary(order: Order, *, max_items: int = 5, max_len: int = 220) -> str:
+    items = list(order.items.all())
+    if not items:
+        return ""
+
+    parts = []
+    for it in items[:max_items]:
+        qty = int(it.qty or 0)
+        name = (it.product_name or "").strip() or "Товар"
+        parts.append(f"{name} x{qty}")
+    if len(items) > max_items:
+        parts.append(f"+{len(items) - max_items} поз.")
+
+    summary = ", ".join(parts).strip()
+    if len(summary) <= max_len:
+        return summary
+    return summary[: max_len - 1].rstrip() + "…"
 
 
 def _create_single_visit_membership(user):
@@ -27,6 +59,101 @@ def _create_single_visit_membership(user):
         left_visits=1,
         is_active=True,
     )
+
+
+def _norm_addr(raw: str) -> str:
+    if not raw:
+        return ""
+    s = raw.strip().lower().replace("ё", "е")
+    return re.sub(r"[^0-9a-zа-я]+", "", s)
+
+
+def _intervals_overlap(start_a, end_a, start_b, end_b) -> bool:
+    return start_a < end_b and start_b < end_a
+
+
+def _sessions_for_location_between(*, location: str, range_start, range_end, lock: bool = False):
+    qs = Session.objects.filter(start_at__lt=range_end, start_at__gte=range_start).order_by("start_at")
+    if lock:
+        qs = qs.select_for_update()
+    target = _norm_addr(location)
+    sessions = []
+    for s in qs:
+        if _norm_addr(s.location) == target:
+            sessions.append(s)
+    return sessions
+
+
+def _finalize_rent_intent(intent: RentPaymentIntent, tb_status: str) -> None:
+    with transaction.atomic():
+        locked = RentPaymentIntent.objects.select_for_update().filter(id=intent.id).first()
+        if not locked:
+            return
+
+        locked.tb_status = tb_status
+        if locked.status == RentPaymentIntent.Status.PAID:
+            locked.save(update_fields=["tb_status"])
+            return
+        if locked.status == RentPaymentIntent.Status.CANCELED:
+            locked.save(update_fields=["tb_status"])
+            return
+
+        now = timezone.now()
+        if locked.expires_at <= now:
+            locked.status = RentPaymentIntent.Status.CANCELED
+            locked.save(update_fields=["tb_status", "status"])
+            return
+
+        slot_start = timezone.localtime(locked.slot_start)
+        duration = max(1, int(locked.duration_min or 0))
+        slot_end = slot_start + timedelta(minutes=duration)
+
+        sessions = _sessions_for_location_between(
+            location=locked.location,
+            range_start=slot_start - timedelta(days=1),
+            range_end=slot_end + timedelta(days=1),
+            lock=True,
+        )
+        for s in sessions:
+            s_start = timezone.localtime(s.start_at)
+            s_end = s_start + timedelta(minutes=max(1, int(s.duration_min or 0)))
+            if _intervals_overlap(slot_start, slot_end, s_start, s_end):
+                locked.status = RentPaymentIntent.Status.CANCELED
+                locked.tb_status = "SLOT_CONFLICT"
+                locked.save(update_fields=["tb_status", "status"])
+                return
+
+        trainer, _ = Trainer.objects.get_or_create(name=RENT_TRAINER_NAME)
+        session_title = f"Аренда зала — {locked.full_name}".strip()[:160]
+        rent_session = Session.objects.create(
+            title=session_title or "Аренда зала",
+            kind=Session.Kind.RENT,
+            client=locked.user,
+            start_at=slot_start,
+            duration_min=duration,
+            location=locked.location,
+            trainer=trainer,
+            capacity=1,
+        )
+
+        rent_request = RentRequest.objects.create(
+            session=rent_session,
+            user=locked.user,
+            full_name=locked.full_name,
+            email=locked.email,
+            phone=locked.phone,
+            social_handle=locked.social_handle,
+            comment=locked.comment,
+            promo_code=locked.promo_code,
+            price_rub=locked.amount_rub,
+        )
+
+        locked.session = rent_session
+        locked.status = RentPaymentIntent.Status.PAID
+        locked.paid_at = now
+        locked.save(update_fields=["tb_status", "session", "status", "paid_at"])
+
+    notify_rent_request_paid(session=rent_session, request_obj=rent_request)
 
 
 from .models import PaymentWebhookLog
@@ -71,6 +198,13 @@ def tbank_webhook(request: HttpRequest):
                     fulfill_order(order)
                     if order.user_id:
                         add_spent(order.user, Decimal(str(order.total_rub)))
+                    notify_order_payment(
+                        user=order.user,
+                        order_id=order.id,
+                        amount_rub=order.total_rub,
+                        method="Онлайн (T-Bank)",
+                        purchase=_order_purchase_summary(order),
+                    )
                 return HttpResponse("OK", status=200, content_type="text/plain")
             elif status.upper() in ("CANCELED", "REJECTED", "DEADLINE_EXPIRED"):
                 order.status = "canceled"
@@ -111,10 +245,42 @@ def tbank_webhook(request: HttpRequest):
                         "invite_sent_at",
                         "invite_expires_at",
                     ])
+                    if first_time:
+                        notify_session_payment(
+                            user=intent.user,
+                            session=intent.session,
+                            amount_rub=intent.amount_rub,
+                            method="Онлайн (T-Bank)",
+                        )
+                        notify_booking_created(
+                            user=intent.user,
+                            session=intent.session,
+                            source="Разовая оплата (онлайн)",
+                        )
                     return HttpResponse("OK", status=200, content_type="text/plain")
 
                 elif status.upper() in ("CANCELED", "REJECTED", "DEADLINE_EXPIRED"):
                     intent.status = PaymentIntent.Status.CANCELED
                     intent.save(update_fields=["tb_status", "status"])
+
+    # --- оплата аренды: OrderId = R-<intent_id> ---
+    if order_id.startswith("R-"):
+        intent_id = order_id.split("-", 1)[1]
+        if intent_id.isdigit():
+            intent = RentPaymentIntent.objects.filter(id=int(intent_id)).first()
+            if intent:
+                if success and status.upper() == "CONFIRMED":
+                    _finalize_rent_intent(intent, status)
+                    return HttpResponse("OK", status=200, content_type="text/plain")
+
+                if status.upper() in ("CANCELED", "REJECTED", "DEADLINE_EXPIRED"):
+                    intent.tb_status = status
+                    if intent.status != RentPaymentIntent.Status.PAID:
+                        intent.status = RentPaymentIntent.Status.CANCELED
+                    intent.save(update_fields=["tb_status", "status"])
+                    return HttpResponse("OK", status=200, content_type="text/plain")
+
+                intent.tb_status = status
+                intent.save(update_fields=["tb_status"])
 
     return HttpResponse("OK", status=200, content_type="text/plain")

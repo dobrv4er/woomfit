@@ -191,7 +191,22 @@
     background: rgba(255, 67, 120, .95);
   }
 
-  .mwrap{ margin-top: 10px; display:flex; flex-direction:column; gap:8px; }
+  .mwrap{
+    margin-top: 10px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    max-height: 248px;
+    overflow-y: auto;
+    padding-right: 4px;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+  .mwrap::-webkit-scrollbar{ width: 6px; }
+  .mwrap::-webkit-scrollbar-thumb{
+    border-radius: 999px;
+    background: rgba(15, 23, 42, .22);
+  }
   .mitem{
     display:flex;
     align-items:flex-start;
@@ -256,6 +271,52 @@
 
   .btn--primary{ border-radius: 16px !important; font-weight: 950 !important; }
   .btn--primary[disabled]{ opacity:.55; pointer-events:none; }
+
+  /* booking notice (locked for 5 sec) */
+  #bookingNoticeBackdrop{
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.55);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 11000;
+    padding: 16px;
+  }
+  #bookingNoticeBackdrop.is-open{ display: flex; }
+  #bookingNoticeModal{
+    width: min(560px, 100%);
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    padding: 18px 18px 14px;
+  }
+  #bookingNoticeTitle{
+    font-size: 18px;
+    font-weight: 900;
+    margin: 0 0 8px;
+  }
+  #bookingNoticeText{
+    font-size: 15px;
+    line-height: 1.45;
+    margin: 0 0 14px;
+  }
+  #bookingNoticeRow{
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  #bookingNoticeTimer{ font-size: 13px; opacity: .75; }
+  #bookingNoticeBtn{
+    border: 0;
+    border-radius: 12px;
+    padding: 10px 14px;
+    font-weight: 900;
+    cursor: pointer;
+    opacity: .6;
+  }
+  #bookingNoticeBtn.is-enabled{ opacity: 1; }
 </style>
 
 <div class="hero">
@@ -383,7 +444,9 @@
                     <div class="mttl">{{ m.title }}</div>
 
                     <div class="chips">
-                      {% if m.is_active %}
+                      {% if m.is_pending_activation %}
+                        <span class="chip chip--bad">Ожидает активации</span>
+                      {% elif m.is_active and m.active_by_date %}
                         <span class="chip chip--ok">Активен</span>
                       {% else %}
                         <span class="chip chip--bad">Не активен</span>
@@ -395,12 +458,16 @@
                       {% if m.total_visits != None %}
                         <span class="chip">Всего: {{ m.total_visits }}</span>
                       {% endif %}
-                      {% if m.end_date %}
+                      {% if m.is_pending_activation and m.validity_days %}
+                        <span class="chip">Срок: {{ m.validity_days }} дн. с 1-го занятия</span>
+                      {% elif m.end_date %}
                         <span class="chip">До: {{ m.end_date|date:"d.m.Y" }}</span>
                       {% endif %}
                     </div>
 
-                    {% if m.start_date or m.end_date %}
+                    {% if m.is_pending_activation %}
+                      <div class="msub">Срок начнётся после первого списания</div>
+                    {% elif m.start_date or m.end_date %}
                       <div class="msub">
                         {% if m.start_date %}С: {{ m.start_date|date:"d.m.Y" }}{% endif %}
                         {% if m.start_date and m.end_date %} • {% endif %}
@@ -442,6 +509,17 @@
   </div>
 </div>
 
+<div id="bookingNoticeBackdrop" aria-hidden="true">
+  <div id="bookingNoticeModal" role="dialog" aria-modal="true" aria-labelledby="bookingNoticeTitle">
+    <div id="bookingNoticeTitle">Важно</div>
+    <div id="bookingNoticeText">Отмена записи возможна не позднее чем за 2 часа до начала тренировки.</div>
+    <div id="bookingNoticeRow">
+      <div id="bookingNoticeTimer">Можно закрыть через 5 сек.</div>
+      <button id="bookingNoticeBtn" type="button" disabled>Понятно</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function(){
   const openBtn = document.getElementById('openSheetBtn');
@@ -457,6 +535,7 @@
   const choiceP = document.getElementById('choicePay');
   const methodM = document.getElementById('methodMembership');
   const methodP = document.getElementById('methodPay');
+  const membershipList = document.getElementById('membershipList');
 
   const membershipRadios = Array.from(document.querySelectorAll('.membership-radio'));
   const membershipItems = Array.from(document.querySelectorAll('.mitem'));
@@ -466,8 +545,21 @@
   if (methodP) methodP.checked = false;
   membershipRadios.forEach(r => { r.checked = false; r.required = false; r.disabled = true; });
 
+  function tuneMembershipViewport(){
+    if (!membershipList) return;
+    const firstItem = membershipList.querySelector('.mitem');
+    if (!firstItem) return;
+    const listStyles = getComputedStyle(membershipList);
+    const gap = parseFloat(listStyles.rowGap || listStyles.gap || '0') || 0;
+    const itemH = firstItem.getBoundingClientRect().height;
+    if (itemH > 0){
+      membershipList.style.maxHeight = `${Math.round((itemH * 2.5) + (gap * 2))}px`;
+    }
+  }
+
   function openSheet(){
     if (!backdrop || !sheet) return;
+    tuneMembershipViewport();
     backdrop.classList.add('is-open');
     sheet.classList.add('is-open');
     document.body.style.overflow = 'hidden';
@@ -555,6 +647,8 @@
   });
 
   setActive(null);
+  tuneMembershipViewport();
+  window.addEventListener('resize', tuneMembershipViewport);
 
   // validate submit
   if (form) {
@@ -624,6 +718,70 @@
     handle.addEventListener('mousedown', onDown);
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
+  }
+})();
+</script>
+
+<script>
+(function(){
+  const backdrop = document.getElementById("bookingNoticeBackdrop");
+  const btn = document.getElementById("bookingNoticeBtn");
+  const timerEl = document.getElementById("bookingNoticeTimer");
+  const textEl = document.getElementById("bookingNoticeText");
+  const titleEl = document.getElementById("bookingNoticeTitle");
+  if (!backdrop || !btn || !timerEl || !textEl || !titleEl) return;
+
+  let lockUntil = 0;
+  let tick = null;
+
+  function openNotice(){
+    backdrop.classList.add("is-open");
+    backdrop.setAttribute("aria-hidden", "false");
+    btn.disabled = true;
+    btn.classList.remove("is-enabled");
+    lockUntil = Date.now() + 5000;
+
+    if (tick) clearInterval(tick);
+    tick = setInterval(() => {
+      const left = lockUntil - Date.now();
+      if (left <= 0){
+        clearInterval(tick);
+        tick = null;
+        timerEl.textContent = "Теперь можно закрыть.";
+        btn.disabled = false;
+        btn.classList.add("is-enabled");
+        return;
+      }
+      timerEl.textContent = `Можно закрыть через ${Math.ceil(left/1000)} сек.`;
+    }, 200);
+  }
+
+  function closeNotice(){
+    if (Date.now() < lockUntil) return;
+    backdrop.classList.remove("is-open");
+    backdrop.setAttribute("aria-hidden", "true");
+  }
+
+  btn.addEventListener("click", closeNotice);
+  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeNotice(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeNotice(); });
+
+  const url = new URL(window.location.href);
+  const notice = url.searchParams.get("notice");
+
+  if (notice === "booked"){
+    titleEl.textContent = "Важно";
+    textEl.textContent = "Отмена записи возможна не позднее чем за 2 часа до начала тренировки.";
+    openNotice();
+  } else if (notice === "unbooked"){
+    titleEl.textContent = "Запись отменена";
+    textEl.textContent = "Вы отменили запись. Ждём вас на других тренировках!";
+    openNotice();
+  }
+
+  if (notice){
+    url.searchParams.delete("notice");
+    history.replaceState(history.state, "", url.toString());
   }
 })();
 </script>

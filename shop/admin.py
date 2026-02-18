@@ -65,5 +65,5 @@ class ProductAdmin(admin.ModelAdmin):
 class TrialUseAdmin(admin.ModelAdmin):
     list_display = ("user", "scope", "used_at")
     list_filter = ("scope",)
-    search_fields = ("user__username", "user__first_name", "user__last_name")
+    search_fields = ("user__full_name", "user__phone")
     ordering = ("-used_at",)

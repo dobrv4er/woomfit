@@ -22,16 +22,6 @@ def norm_phone(v: str) -> str:
     return digits
 
 
-def split_name(full: str):
-    full = (full or "").strip()
-    if not full:
-        return "", ""
-    parts = full.split()
-    if len(parts) == 1:
-        return parts[0], ""
-    return parts[0], " ".join(parts[1:])
-
-
 def parse_date(s: str):
     s = (s or "").strip()
     if not s:
@@ -131,7 +121,6 @@ class Command(BaseCommand):
                 user = User.objects.filter(phone=phone).first()
 
             if user is None:
-                first, last = split_name(client)
                 base_username = f"user_{phone}" if phone else f"user_{get_random_string(8)}"
                 username = base_username
                 k = 1
@@ -145,11 +134,18 @@ class Command(BaseCommand):
                     user = User.objects.create(
                         username=username,
                         phone=phone or "",
-                        first_name=first,
-                        last_name=last,
+                        full_name=(client or "").strip(),
+                        first_name="",
+                        last_name="",
                     )
                     user.set_unusable_password()
                     user.save()
+            elif client and not user.full_name:
+                user.full_name = client.strip()
+                user.first_name = ""
+                user.last_name = ""
+                if not opts["dry_run"]:
+                    user.save(update_fields=["full_name", "first_name", "last_name"])
 
             total, left, used = parse_left_total(comp)
 

@@ -16,14 +16,12 @@
 
   .date-card{position:relative;}
   .month-overlay{
-    position:absolute;
-    left:14px;
-    top:10px;
+    position:static;
+    margin:0 0 10px 6px;
     font-weight:900;
     color:#9aa0a6;
     text-transform:lowercase;
     pointer-events:none;
-    z-index:2;
   }
 
   .days-strip{
@@ -31,7 +29,7 @@
     gap:14px;
     overflow-x:auto;
     overflow-y:hidden;
-    padding:28px 6px 6px 76px;
+    padding:0 6px 6px 6px;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
     touch-action: pan-x;
@@ -152,6 +150,7 @@
        class="days-strip"
        data-selected="{{ selected|date:'Y-m-d' }}"
        data-loc="{{ selected_location|default:'' }}"
+       data-min="{{ today_iso }}"
        data-start="{{ strip_start }}"
        data-end="{{ strip_end }}">
     {% for d in days %}
@@ -193,12 +192,14 @@
 
   let currentDay = strip.dataset.selected;
   let currentLoc = strip.dataset.loc || "";
+  const minDay = strip.dataset.min || currentDay;
 
   const stateKey = "woomfit_daystrip_state_global";
   const fmtMonth = new Intl.DateTimeFormat("ru-RU", { month: "long" });
   const fmtWeekday = new Intl.DateTimeFormat("ru-RU", { weekday: "short" });
 
   function buildHref(dayIso, loc){
+    dayIso = clampDayIso(dayIso);
     const url = new URL(window.location.href);
     url.searchParams.set("day", dayIso);
     if (loc) url.searchParams.set("loc", loc);
@@ -217,6 +218,14 @@
     const d = String(dt.getDate()).padStart(2,"0");
     return `${y}-${m}-${d}`;
   }
+
+  function clampDayIso(dayIso){
+    if (!dayIso) return minDay;
+    return dayIso < minDay ? minDay : dayIso;
+  }
+
+  currentDay = clampDayIso(currentDay);
+  strip.dataset.selected = currentDay;
 
   function createDayEl(dayIso){
     const dt = isoToDate(dayIso);
@@ -251,6 +260,7 @@
   }
 
   function setActiveDay(iso){
+    iso = clampDayIso(iso);
     currentDay = iso;
     strip.dataset.selected = iso;
     strip.querySelectorAll(".day-card").forEach(el=>{
@@ -284,8 +294,9 @@
       if (!raw) return false;
       const st = JSON.parse(raw);
       if (!st || !st.start || !st.end) return false;
+      if (st.start < minDay) return false;
 
-      strip.scrollLeft = Number(st.scrollLeft || 0);
+      strip.scrollLeft = Math.max(0, Number(st.scrollLeft || 0));
       return true;
     }catch(e){ return false; }
   }
@@ -293,36 +304,6 @@
   const EXTEND_BY = 14;
   const EDGE_PX = 120;
   let extending = false;
-
-  function prependDays(){
-    const first = strip.firstElementChild;
-    if (!first) return;
-
-    const beforeLeft = first.getBoundingClientRect().left;
-
-    let startIso = strip.dataset.start;
-    let startDt = isoToDate(startIso);
-
-    const toAdd = [];
-    for (let i = EXTEND_BY; i >= 1; i--){
-      const dt = new Date(startDt);
-      dt.setDate(dt.getDate() - i);
-      toAdd.push(dateToIso(dt));
-    }
-
-    const frag = document.createDocumentFragment();
-    toAdd.forEach(iso => frag.appendChild(createDayEl(iso)));
-    strip.insertBefore(frag, first);
-
-    const newStart = new Date(startDt);
-    newStart.setDate(newStart.getDate() - EXTEND_BY);
-    strip.dataset.start = dateToIso(newStart);
-
-    const afterLeft = first.getBoundingClientRect().left;
-    strip.scrollLeft += (afterLeft - beforeLeft);
-
-    saveStripState();
-  }
 
   function appendDays(){
     let endIso = strip.dataset.end;
@@ -346,14 +327,12 @@
   function ensureInfiniteStrip(){
     if (extending) return;
 
-    const nearLeft = strip.scrollLeft < EDGE_PX;
     const nearRight = (strip.scrollWidth - (strip.scrollLeft + strip.clientWidth)) < EDGE_PX;
 
-    if (!nearLeft && !nearRight) return;
+    if (!nearRight) return;
 
     extending = true;
     try{
-      if (nearLeft) prependDays();
       if (nearRight) appendDays();
       updateMonthOverlay();
     } finally {
@@ -366,6 +345,7 @@
 
   async function loadSessions({day, loc, push=true}){
     if (!day) day = currentDay;
+    day = clampDayIso(day);
     if (loc === undefined) loc = currentLoc;
 
     if (inflight) inflight.abort();
@@ -474,7 +454,7 @@
 
   window.addEventListener("popstate", () => {
     const p = new URL(window.location.href).searchParams;
-    const day = p.get("day") || currentDay;
+    const day = clampDayIso(p.get("day") || currentDay);
     const loc = p.get("loc") || "";
     loadSessions({day, loc, push: false});
   });

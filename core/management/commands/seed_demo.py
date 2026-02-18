@@ -1,6 +1,6 @@
+from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
-from datetime import timedelta
 
 from schedule.models import Trainer, Session
 from shop.models import Category, Product
@@ -9,24 +9,18 @@ class Command(BaseCommand):
     help = "Seed demo data (safe to re-run)"
 
     def handle(self, *args, **options):
-        t1, _ = Trainer.objects.get_or_create(name="Совина Елена")
-        t2, _ = Trainer.objects.get_or_create(name="Карамита Дарья")
+        trainer, _ = Trainer.objects.get_or_create(name="Совина Елена")
 
         now = timezone.localtime()
-        start1 = now.replace(hour=11, minute=0, second=0, microsecond=0)
-        start2 = now.replace(hour=12, minute=0, second=0, microsecond=0)
+        start_at = now.replace(hour=11, minute=0, second=0, microsecond=0)
+        locations = [x.strip() for x in getattr(settings, "WOOMFIT_LOCATIONS", []) if str(x).strip()]
+        default_location = locations[0] if locations else "Сакко и Ванцетти, 93а"
 
         Session.objects.get_or_create(
             title="Плоский живот",
-            start_at=start1,
-            trainer=t1,
-            defaults={"duration_min": 50, "location": "Сакко и Ванцетти, 93а", "capacity": 18},
-        )
-        Session.objects.get_or_create(
-            title="Здоровая спина",
-            start_at=start2,
-            trainer=t2,
-            defaults={"duration_min": 50, "location": "Аркадия Гайдара, 86", "capacity": 16},
+            start_at=start_at,
+            trainer=trainer,
+            defaults={"duration_min": 50, "location": default_location, "capacity": 18},
         )
 
         c1, _ = Category.objects.get_or_create(name="Абонементы", defaults={"sort": 10})

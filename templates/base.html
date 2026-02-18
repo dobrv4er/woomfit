@@ -17,6 +17,7 @@
   <nav class="desknav">
     <a class="desknav__item {% if request.path == '/' %}is-active{% endif %}" href="{% url 'core:home' %}">Главная</a>
     <a class="desknav__item {% if request.path|slice:':10' == '/schedule/' %}is-active{% endif %}" href="{% url 'schedule:list' %}">Расписание</a>
+    <a class="desknav__item {% if request.path|slice:':6' == '/news/' %}is-active{% endif %}" href="{% url 'news:list' %}">Новости</a>
     <a class="desknav__item {% if request.path|slice:':6' == '/shop/' %}is-active{% endif %}" href="{% url 'shop:menu' %}">Магазин{% if cart.count %} ({{ cart.count }}){% endif %}</a>
     <a class="desknav__item {% if request.path|slice:':9' == '/profile/' %}is-active{% endif %}" href="{% url 'accounts:profile' %}">Профиль</a>
   </nav>
@@ -32,6 +33,54 @@
     {% block content %}{% endblock %}
   </main>
 
+  <footer class="legal-footer">
+    <a href="{% url 'core:public_offer' %}">Публичная оферта</a>
+    <a href="{% url 'core:refund_policy' %}">Оплата и возврат</a>
+    <a href="{% url 'core:privacy' %}">Политика конфиденциальности</a>
+    <a href="{% url 'core:personal_data_consent' %}">Согласие на ПДн</a>
+    <a href="{% url 'core:cookies_policy' %}">Политика Cookie</a>
+    <a href="{% url 'core:cookie_consent' %}">Согласие на Cookie</a>
+    <a href="{% url 'core:cookie_settings' %}">Настройки Cookie</a>
+    <a href="{% url 'core:requisites' %}">Реквизиты</a>
+    <button type="button" id="cookieManageBtn" class="legal-footer__btn">Настройки cookie</button>
+  </footer>
+
+  <div id="cookieConsent" class="cookie-consent is-hidden" role="dialog" aria-modal="true" aria-labelledby="cookieTitle">
+    <div class="cookie-consent__card">
+      <div class="cookie-consent__title" id="cookieTitle">Мы используем cookie</div>
+      <div class="cookie-consent__text">
+        Мы используем обязательные cookie для авторизации и работы сайта.
+        Аналитические и маркетинговые cookie включаются только после вашего согласия.
+        Подробнее: <a href="{% url 'core:privacy' %}">политика конфиденциальности</a>,
+        <a href="{% url 'core:cookies_policy' %}">политика Cookie</a>,
+        <a href="{% url 'core:cookie_consent' %}">согласие на Cookie</a>,
+        <a href="{% url 'core:cookie_settings' %}">настройки Cookie</a>.
+      </div>
+
+      <div class="cookie-consent__actions">
+        <button type="button" class="btn btn--primary" data-cookie-action="accept-all">Принять все</button>
+        <button type="button" class="btn btn--ghost" data-cookie-action="essential-only">Только необходимые</button>
+        <button type="button" class="btn btn--muted" data-cookie-action="open-settings">Настроить</button>
+      </div>
+
+      <div id="cookieSettingsPanel" class="cookie-settings is-hidden">
+        <label class="cookie-settings__row">
+          <span>Обязательные cookie</span>
+          <input type="checkbox" checked disabled>
+        </label>
+        <label class="cookie-settings__row">
+          <span>Аналитические cookie</span>
+          <input type="checkbox" id="cookieAnalytics">
+        </label>
+        <label class="cookie-settings__row">
+          <span>Маркетинговые cookie</span>
+          <input type="checkbox" id="cookieMarketing">
+        </label>
+        <button type="button" class="btn btn--primary btn--full" data-cookie-action="save-settings">Сохранить выбор</button>
+      </div>
+    </div>
+  </div>
+
   <nav class="tabbar" aria-label="Нижнее меню">
     <a class="tabbar__item {% if request.path == '/' %}is-active{% endif %}" href="{% url 'core:home' %}">
       <span class="tabbar__icon">⌂</span>
@@ -40,6 +89,10 @@
     <a class="tabbar__item {% if request.path|slice:':10' == '/schedule/' %}is-active{% endif %}" href="{% url 'schedule:list' %}">
       <span class="tabbar__icon">🕒</span>
       <span class="tabbar__label">Расписание</span>
+    </a>
+    <a class="tabbar__item {% if request.path|slice:':6' == '/news/' %}is-active{% endif %}" href="{% url 'news:list' %}">
+      <span class="tabbar__icon">📰</span>
+      <span class="tabbar__label">Новости</span>
     </a>
     <a class="tabbar__item {% if request.path|slice:':6' == '/shop/' %}is-active{% endif %}" href="{% url 'shop:menu' %}">
       <span class="tabbar__icon">🛍</span>
@@ -53,5 +106,129 @@
       <span class="tabbar__label">Профиль</span>
     </a>
   </nav>
+
+  <script>
+  (function() {
+    const CONSENT_KEY = "woom_cookie_consent_v1";
+    const CONSENT_COOKIE = "woom_cookie_consent";
+    const CONSENT_TTL_DAYS = 180;
+
+    const banner = document.getElementById("cookieConsent");
+    const settingsPanel = document.getElementById("cookieSettingsPanel");
+    const analyticsInput = document.getElementById("cookieAnalytics");
+    const marketingInput = document.getElementById("cookieMarketing");
+    const manageBtn = document.getElementById("cookieManageBtn");
+
+    if (!banner || !settingsPanel || !analyticsInput || !marketingInput) return;
+
+    function setCookie(name, value, days) {
+      const maxAge = Math.floor(days * 24 * 60 * 60);
+      document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; samesite=lax`;
+    }
+
+    function getStoredConsent() {
+      try {
+        const raw = localStorage.getItem(CONSENT_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || parsed.required !== true) return null;
+        return parsed;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function persistConsent(consent) {
+      const payload = {
+        required: true,
+        analytics: !!consent.analytics,
+        marketing: !!consent.marketing,
+        updated_at: new Date().toISOString(),
+      };
+      try {
+        localStorage.setItem(CONSENT_KEY, JSON.stringify(payload));
+      } catch (e) {}
+      setCookie(CONSENT_COOKIE, JSON.stringify(payload), CONSENT_TTL_DAYS);
+      document.documentElement.dataset.cookieAnalytics = payload.analytics ? "1" : "0";
+      document.documentElement.dataset.cookieMarketing = payload.marketing ? "1" : "0";
+      hideBanner();
+    }
+
+    function showBanner(openSettings) {
+      banner.classList.remove("is-hidden");
+      if (openSettings) {
+        settingsPanel.classList.remove("is-hidden");
+      } else {
+        settingsPanel.classList.add("is-hidden");
+      }
+    }
+
+    function hideBanner() {
+      banner.classList.add("is-hidden");
+      settingsPanel.classList.add("is-hidden");
+    }
+
+    function applyInputsFromConsent(consent) {
+      analyticsInput.checked = !!(consent && consent.analytics);
+      marketingInput.checked = !!(consent && consent.marketing);
+    }
+
+    const existingConsent = getStoredConsent();
+    if (existingConsent) {
+      applyInputsFromConsent(existingConsent);
+      document.documentElement.dataset.cookieAnalytics = existingConsent.analytics ? "1" : "0";
+      document.documentElement.dataset.cookieMarketing = existingConsent.marketing ? "1" : "0";
+      hideBanner();
+    } else {
+      applyInputsFromConsent({analytics: false, marketing: false});
+      showBanner(false);
+    }
+
+    banner.addEventListener("click", function(event) {
+      const actionBtn = event.target.closest("[data-cookie-action]");
+      if (!actionBtn) return;
+
+      const action = actionBtn.getAttribute("data-cookie-action");
+      if (action === "accept-all") {
+        persistConsent({analytics: true, marketing: true});
+        return;
+      }
+      if (action === "essential-only") {
+        persistConsent({analytics: false, marketing: false});
+        return;
+      }
+      if (action === "open-settings") {
+        settingsPanel.classList.toggle("is-hidden");
+        return;
+      }
+      if (action === "save-settings") {
+        persistConsent({
+          analytics: analyticsInput.checked,
+          marketing: marketingInput.checked,
+        });
+      }
+    });
+
+    if (manageBtn) {
+      manageBtn.addEventListener("click", function() {
+        applyInputsFromConsent(getStoredConsent() || {analytics: false, marketing: false});
+        showBanner(true);
+      });
+    }
+  })();
+  </script>
+  <script>
+  (function() {
+    const flash = document.querySelector(".flash");
+    if (!flash) return;
+
+    window.setTimeout(function() {
+      flash.classList.add("is-hiding");
+      window.setTimeout(function() {
+        flash.remove();
+      }, 220);
+    }, 5000);
+  })();
+  </script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib import admin
 
-from .models import Trainer, Session, Booking, Workout
+from .models import Trainer, Session, Booking, Workout, RentRequest, RentPaymentIntent
 
 
 class SessionAdminForm(forms.ModelForm):
@@ -14,8 +14,8 @@ class SessionAdminForm(forms.ModelForm):
         kind = cleaned.get("kind", "group")
         client = cleaned.get("client")
 
-        if kind in ("personal", "rent") and not client:
-            raise forms.ValidationError("Для персональной тренировки/аренды нужно указать клиента")
+        if kind == "personal" and not client:
+            raise forms.ValidationError("Для персональной тренировки нужно указать клиента")
 
         if kind == "group":
             cleaned["client"] = None
@@ -34,6 +34,7 @@ class WorkoutAdmin(admin.ModelAdmin):
 class TrainerAdmin(admin.ModelAdmin):
     search_fields = ("name",)
     list_display = ("id", "name")
+    ordering = ("name", "id")
 
 
 class BookingInline(admin.TabularInline):
@@ -44,15 +45,35 @@ class BookingInline(admin.TabularInline):
     fields = ("user", "membership", "booking_status", "attendance_status", "created_at", "marked_at", "canceled_at")
 
 
+class RentRequestInline(admin.StackedInline):
+    model = RentRequest
+    extra = 0
+    can_delete = False
+    readonly_fields = ("created_at",)
+    fields = ("full_name", "email", "phone", "social_handle", "promo_code", "comment", "price_rub", "created_at", "user")
+
+
 @admin.register(Session)
 class SessionAdmin(admin.ModelAdmin):
     form = SessionAdminForm
-    list_display = ("id", "start_at", "title", "kind", "workout", "client", "trainer", "location", "capacity", "duration_min")
+    list_display = (
+        "id",
+        "start_at",
+        "title",
+        "kind",
+        "rent_payment_state",
+        "workout",
+        "client",
+        "trainer",
+        "location",
+        "capacity",
+        "duration_min",
+    )
     list_filter = ("location", "trainer", "kind")
     search_fields = ("title", "location", "trainer__name", "workout__name")
     autocomplete_fields = ("trainer", "client", "workout")
     ordering = ("start_at",)
-    inlines = (BookingInline,)
+    inlines = (BookingInline, RentRequestInline)
 
     def get_changeform_initial_data(self, request):
         initial = super().get_changeform_initial_data(request)
@@ -93,6 +114,16 @@ class SessionAdmin(admin.ModelAdmin):
 
         return initial
 
+    @admin.display(description="Статус аренды")
+    def rent_payment_state(self, obj: Session):
+        if obj.kind != Session.Kind.RENT:
+            return ""
+        try:
+            obj.rent_request
+        except RentRequest.DoesNotExist:
+            return "Без заявки"
+        return "Оплачено"
+
     def save_model(self, request, obj, form, change):
         # ✅ если выбран workout — подтягиваем значения (но не ломаем, если админ явно поменял)
         if obj.workout:
@@ -117,6 +148,24 @@ class SessionAdmin(admin.ModelAdmin):
 class BookingAdmin(admin.ModelAdmin):
     list_display = ("id", "user", "membership", "session", "booking_status", "attendance_status", "created_at")
     list_filter = ("booking_status", "attendance_status", "session__location")
-    search_fields = ("user__username", "user__first_name", "user__last_name", "session__title", "session__location")
+    search_fields = ("user__full_name", "user__phone", "session__title", "session__location")
     autocomplete_fields = ("user", "session", "membership")
     readonly_fields = ("created_at", "marked_at", "canceled_at")
+
+
+@admin.register(RentRequest)
+class RentRequestAdmin(admin.ModelAdmin):
+    list_display = ("id", "full_name", "phone", "price_rub", "created_at", "session", "user")
+    list_filter = ("created_at", "price_rub")
+    search_fields = ("full_name", "phone", "email", "session__location")
+    autocomplete_fields = ("session", "user")
+    readonly_fields = ("created_at",)
+
+
+@admin.register(RentPaymentIntent)
+class RentPaymentIntentAdmin(admin.ModelAdmin):
+    list_display = ("id", "full_name", "phone", "status", "amount_rub", "slot_start", "expires_at", "session")
+    list_filter = ("status", "created_at", "expires_at")
+    search_fields = ("full_name", "phone", "email", "location", "tb_payment_id")
+    autocomplete_fields = ("session", "user")
+    readonly_fields = ("created_at", "paid_at")

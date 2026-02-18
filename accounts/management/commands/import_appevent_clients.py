@@ -62,21 +62,13 @@ class Command(BaseCommand):
 
         for row in reader:
             full_name = pick(row, "Имя", "ФИО", "Name", "Full name")
+            full_name = " ".join(full_name.split())
             phone = norm_phone(pick(row, "Телефон", "Номер телефона", "Phone"))
             email = pick(row, "Email", "E-mail", "Почта")
 
             if not (phone or email or full_name):
                 skipped += 1
                 continue
-
-            first_name = ""
-            last_name = ""
-            if full_name:
-                parts = full_name.split()
-                if len(parts) >= 1:
-                    first_name = parts[0]
-                if len(parts) >= 2:
-                    last_name = " ".join(parts[1:])
 
             # ключ поиска: телефон -> email
             user = None
@@ -102,8 +94,9 @@ class Command(BaseCommand):
                     username=username,
                     email=email or "",
                     phone=phone or "",
-                    first_name=first_name,
-                    last_name=last_name,
+                    full_name=full_name,
+                    first_name="",
+                    last_name="",
                 )
                 user.set_unusable_password()  # пароли из CRM перенести нельзя
                 user.save()
@@ -116,11 +109,10 @@ class Command(BaseCommand):
                 if phone and (not getattr(user, "phone", "")):
                     user.phone = phone
                     changed = True
-                if first_name and (not user.first_name):
-                    user.first_name = first_name
-                    changed = True
-                if last_name and (not user.last_name):
-                    user.last_name = last_name
+                if full_name and (not user.full_name):
+                    user.full_name = full_name
+                    user.first_name = ""
+                    user.last_name = ""
                     changed = True
                 if changed and not opts["dry_run"]:
                     user.save()

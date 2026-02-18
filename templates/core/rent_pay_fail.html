@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Оплата аренды — ошибка{% endblock %}
+
+{% block topbar_left %}
+  <a class="btn btn--ghost" style="padding:8px 10px; border-radius:14px;" href="{% url 'core:rent' %}?week={{ back_week_iso }}">←</a>
+{% endblock %}
+
+{% block content %}
+  <h2 class="section-title" style="margin-top:6px;">Оплата аренды</h2>
+
+  <div class="card" style="text-align:center;">
+    <div style="font-size:34px;">❌</div>
+    <div style="font-weight:900; font-size:18px;">Не удалось завершить оплату</div>
+    <div class="muted" style="font-weight:900; margin-top:6px;">
+      Слот будет подтверждён только после успешной оплаты в течение 15 минут.
+    </div>
+
+    <div style="margin-top:14px; display:flex; gap:10px; justify-content:center;">
+      <a class="btn btn--primary" href="{% url 'core:rent' %}?week={{ back_week_iso }}">Вернуться к аренде</a>
+    </div>
+  </div>
+{% endblock %}

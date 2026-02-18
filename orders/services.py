@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from datetime import timedelta
 from decimal import Decimal
 
 from django.db import transaction
 from django.utils import timezone
 
 from memberships.models import Membership
-from wallet.models import Wallet, WalletTx
+from wallet.services import topup
 
 
 def _grant_membership(*, user, product, qty: int) -> None:
@@ -21,37 +20,26 @@ def _grant_membership(*, user, product, qty: int) -> None:
     visits = product.membership_visits
     days = product.membership_days
 
-    today = timezone.localdate()
+    validity_days = int(days or 0) or None
 
     for _ in range(qty):
-        m = Membership.objects.create(
+        Membership.objects.create(
             user=user,
             title=title,
             kind=kind,
             scope=scope,
             total_visits=visits if kind == Membership.Kind.VISITS else None,
             left_visits=visits if kind == Membership.Kind.VISITS else None,
+            validity_days=validity_days,
             is_active=True,
         )
-
-        # срок по дням (для time/unlimited)
-        if days and kind in (Membership.Kind.TIME, Membership.Kind.UNLIMITED):
-            m.start_date = today
-            m.end_date = today + timedelta(days=int(days) - 1)
-            m.save(update_fields=["start_date", "end_date"])
 
 
 def _wallet_topup(*, user, amount_rub: int, reason: str) -> None:
     if not user or not amount_rub:
         return
 
-    wallet, _ = Wallet.objects.get_or_create(user=user)
-    WalletTx.objects.create(
-        wallet=wallet,
-        kind=WalletTx.Kind.TOPUP,
-        amount=Decimal(str(amount_rub)),
-        reason=reason,
-    )
+    topup(user, Decimal(str(amount_rub)), reason=reason)
 
 
 @transaction.atomic

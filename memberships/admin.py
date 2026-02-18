@@ -11,11 +11,12 @@ class MembershipAdmin(admin.ModelAdmin):
         "kind",
         "scope",
         "left_visits",
+        "validity_days",
         "start_date",
         "end_date",
         "is_active",
         "created_at",
     )
     list_filter = ("kind", "scope", "is_active")
-    search_fields = ("user__username", "user__first_name", "user__last_name", "title")
+    search_fields = ("user__full_name", "user__phone", "title")
     ordering = ("-created_at",)

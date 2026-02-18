@@ -23,6 +23,8 @@ class Order(models.Model):
 
     tb_payment_id = models.CharField(max_length=64, blank=True)
     tb_status = models.CharField(max_length=64, blank=True)
+    legal_accepted_at = models.DateTimeField("Юр. согласие: дата", null=True, blank=True)
+    legal_accept_ip = models.GenericIPAddressField("Юр. согласие: IP", null=True, blank=True)
 
     fulfilled_at = models.DateTimeField(null=True, blank=True)
 

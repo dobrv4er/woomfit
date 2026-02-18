@@ -1,0 +1,391 @@
+{% extends "base.html" %}
+{% block title %}Аренда зала — WOOM FIT{% endblock %}
+
+{% block topbar_left %}
+  <a class="btn btn--ghost" style="padding:8px 10px; border-radius:14px;" href="javascript:history.back()">←</a>
+{% endblock %}
+
+{% block content %}
+<style>
+  .rent-screen{display:grid; gap:12px;}
+  .rent-screen .section-title{margin:8px 0 2px;}
+  .rent-meta{font-weight:800; color:#475569;}
+  .rent-legend{display:flex; gap:14px; flex-wrap:wrap; align-items:center;}
+  .rent-legend__item{display:flex; gap:8px; align-items:center; color:#334155; font-weight:800;}
+  .rent-mark{
+    width:34px; height:22px; border-radius:6px; border:1px solid #cbd5e1; background:#fff; display:inline-block;
+  }
+  .rent-mark--busy{
+    background:repeating-linear-gradient(135deg, #e5e7eb 0px, #e5e7eb 8px, #f8fafc 8px, #f8fafc 16px);
+  }
+  .rent-mark--pending{
+    background:repeating-linear-gradient(135deg, #fef3c7 0px, #fef3c7 8px, #fffbeb 8px, #fffbeb 16px);
+  }
+  .rent-mark--booked{
+    background:#14b8a6;
+    border-color:#0f766e;
+  }
+  .rent-week{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    border:1px solid var(--border); border-radius:14px; background:#fff; padding:8px;
+  }
+  .rent-week__title{font-size:18px; font-weight:900; color:#2563eb; text-align:center; flex:1;}
+  .rent-week__btn{
+    width:42px; height:42px; border-radius:10px; border:1px solid var(--border);
+    display:flex; align-items:center; justify-content:center; font-size:22px;
+    text-decoration:none; background:#fff;
+  }
+  .rent-week__btn.is-disabled{opacity:0.35; pointer-events:none;}
+
+  .rent-grid-wrap{
+    border:1px solid var(--border);
+    border-radius:16px;
+    background:#fff;
+    overflow:auto;
+  }
+  .rent-grid{
+    width:100%;
+    border-collapse:separate;
+    border-spacing:0;
+    min-width:760px;
+  }
+  .rent-grid th,
+  .rent-grid td{
+    border-right:1px solid #e5e7eb;
+    border-bottom:1px solid #e5e7eb;
+    text-align:center;
+    padding:0;
+  }
+  .rent-grid thead th{
+    background:#f8fafc;
+    color:#334155;
+    font-weight:900;
+    padding:10px 6px;
+    font-size:15px;
+  }
+  .rent-grid__time{
+    width:72px;
+    min-width:72px;
+    font-weight:900;
+    color:#334155;
+    background:#f8fafc;
+    font-size:15px;
+  }
+  .rent-slot{
+    width:100%;
+    min-height:40px;
+    display:block;
+    border:0;
+    background:#fff;
+    cursor:pointer;
+  }
+  .rent-slot--busy{
+    background:repeating-linear-gradient(135deg, #e5e7eb 0px, #e5e7eb 8px, #f8fafc 8px, #f8fafc 16px);
+    cursor:not-allowed;
+  }
+  .rent-slot--pending{
+    background:repeating-linear-gradient(135deg, #fef3c7 0px, #fef3c7 8px, #fffbeb 8px, #fffbeb 16px);
+    cursor:not-allowed;
+  }
+  .rent-slot--rent-booked{
+    background:#14b8a6;
+    cursor:not-allowed;
+  }
+  .rent-slot--past{
+    background:#f1f5f9;
+    cursor:not-allowed;
+  }
+  .rent-slot--free:hover{background:#ecfeff;}
+  .rent-slot--free.is-selected{
+    background:#14b8a6;
+    color:#fff;
+    box-shadow:inset 0 0 0 2px rgba(255,255,255,0.55);
+  }
+  .rent-order{
+    display:grid;
+    gap:8px;
+    margin-top:8px;
+  }
+  .rent-order__line{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    font-weight:800;
+  }
+  .rent-order__line b{
+    text-align:right;
+  }
+  .rent-form{
+    display:grid;
+    gap:12px;
+  }
+  .rent-booked{
+    display:grid;
+    gap:10px;
+  }
+  .rent-booked__empty{
+    font-weight:800;
+    color:#64748b;
+  }
+  .rent-booked__list{
+    display:grid;
+    gap:8px;
+  }
+  .rent-booked__item{
+    border:1px solid #99f6e4;
+    background:#f0fdfa;
+    border-radius:12px;
+    padding:10px 12px;
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    font-weight:900;
+    color:#0f172a;
+  }
+  .rent-fields{
+    display:grid;
+    gap:10px;
+  }
+  .rent-label{
+    display:grid;
+    gap:6px;
+    color:#334155;
+    font-weight:800;
+    font-size:14px;
+  }
+  .rent-label input,
+  .rent-label textarea{
+    width:100%;
+    border:1px solid #cbd5e1;
+    border-radius:12px;
+    background:#f8fafc;
+    padding:12px 12px;
+    font-weight:700;
+    margin:0;
+  }
+  .rent-label textarea{min-height:90px; resize:vertical;}
+  #rentSubmitBtn[disabled]{opacity:0.55; cursor:not-allowed;}
+
+  @media (max-width: 768px){
+    .rent-grid{min-width:620px;}
+    .rent-grid__time{width:60px; min-width:60px;}
+    .rent-slot{min-height:34px;}
+  }
+</style>
+
+<section class="rent-screen">
+  <h1 class="section-title">Аренда зала</h1>
+  <div class="rent-meta">Адрес: {{ location }}</div>
+
+  <div class="rent-legend">
+    <div class="rent-legend__item">
+      <span class="rent-mark"></span>
+      <span>свободно</span>
+    </div>
+    <div class="rent-legend__item">
+      <span class="rent-mark rent-mark--busy"></span>
+      <span>занято</span>
+    </div>
+    <div class="rent-legend__item">
+      <span class="rent-mark rent-mark--pending"></span>
+      <span>слот удерживается до оплаты</span>
+    </div>
+    {% if show_my_paid_rent_legend %}
+      <div class="rent-legend__item">
+        <span class="rent-mark rent-mark--booked"></span>
+        <span>моя оплаченная бронь аренды</span>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="rent-week">
+    {% if can_prev_week %}
+      <a class="rent-week__btn" href="?week={{ prev_week_iso }}" aria-label="Предыдущая неделя">‹</a>
+    {% else %}
+      <span class="rent-week__btn is-disabled" aria-hidden="true">‹</span>
+    {% endif %}
+    <div class="rent-week__title">{{ week_label }}</div>
+    <a class="rent-week__btn" href="?week={{ next_week_iso }}" aria-label="Следующая неделя">›</a>
+  </div>
+
+  {% if show_paid_rent_details %}
+    <div class="card rent-booked">
+      <h2 class="section-title">Мои оплаченные брони на период</h2>
+      {% if booked_slots %}
+        <div class="rent-booked__list">
+          {% for booked in booked_slots %}
+            <div class="rent-booked__item">
+              <span>{{ booked.day_label }}</span>
+              <span>{{ booked.time_label }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="rent-booked__empty">На выбранные даты ваших оплаченных броней пока нет.</div>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <form method="post" class="rent-form" id="rentForm">
+    {% csrf_token %}
+    <input type="hidden" name="week" value="{{ selected_week_iso }}">
+    <input type="hidden" name="slot" id="rentSlotInput" value="{{ selected_slot }}">
+
+    <div class="rent-grid-wrap">
+      <table class="rent-grid">
+        <thead>
+          <tr>
+            <th class="rent-grid__time"></th>
+            {% for d in days %}
+              <th>{{ d.weekday }},<br>{{ d.day }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <th class="rent-grid__time">{{ row.label }}</th>
+              {% for c in row.cells %}
+                <td>
+                  {% if c.state == "rent_paid" %}
+                    <span class="rent-slot rent-slot--rent-booked" title="Моя оплаченная бронь"></span>
+                  {% elif c.state == "pending" %}
+                    <span class="rent-slot rent-slot--pending" title="Слот удерживается до оплаты"></span>
+                  {% elif c.is_busy %}
+                    <span class="rent-slot rent-slot--busy" title="Занято"></span>
+                  {% elif c.is_past %}
+                    <span class="rent-slot rent-slot--past" title="Прошедший слот"></span>
+                  {% else %}
+                    <button
+                      type="button"
+                      class="rent-slot rent-slot--free {% if c.is_selected %}is-selected{% endif %}"
+                      data-slot="{{ c.key }}"
+                      data-label="{{ c.label }}"
+                      aria-label="{{ c.label }}"
+                    ></button>
+                  {% endif %}
+                </td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card rent-order">
+      <div class="rent-order__line">
+        <span>Выбранный слот</span>
+        <b id="rentSlotLabel">{% if selected_slot_label %}{{ selected_slot_label }}{% else %}Не выбран{% endif %}</b>
+      </div>
+      <div class="rent-order__line">
+        <span>Стоимость</span>
+        <b>{{ price_rub }} руб.</b>
+      </div>
+    </div>
+
+    <h2 class="section-title">Оформление заказа</h2>
+    <div class="rent-fields">
+      <label class="rent-label">
+        <span>Имя</span>
+        <input type="text" name="full_name" value="{{ contact.full_name }}" required>
+      </label>
+      <label class="rent-label">
+        <span>E-mail</span>
+        <input type="email" name="email" value="{{ contact.email }}" placeholder="mail@example.com">
+      </label>
+      <label class="rent-label">
+        <span>Телефон</span>
+        <input type="tel" name="phone" value="{{ contact.phone }}" placeholder="+7 999 999 99 99" required>
+      </label>
+      <label class="rent-label">
+        <span>Ссылки на соц. сети</span>
+        <input type="text" name="social_handle" value="{{ contact.social_handle }}" placeholder="Ник или ID без @">
+      </label>
+      <label class="rent-label">
+        <span>Комментарий</span>
+        <textarea name="comment" placeholder="Комментарий">{{ contact.comment }}</textarea>
+      </label>
+      <label class="rent-label">
+        <span>Промокод/сертификат</span>
+        <input type="text" name="promo_code" value="{{ contact.promo_code }}" placeholder="Необязательно">
+      </label>
+    </div>
+
+    <div class="card" style="display:grid; gap:10px;">
+      <div class="item" style="background:#f8fafc;">
+        <div>
+          <div style="font-weight:900;">Кошелёк</div>
+          {% if wallet_balance is not None %}
+            <div class="muted" style="font-weight:900;">Баланс: {{ wallet_balance }} руб.</div>
+          {% else %}
+            <div class="muted" style="font-weight:900;">Войдите в аккаунт для оплаты из кошелька</div>
+          {% endif %}
+        </div>
+        <button
+          type="submit"
+          name="method"
+          value="wallet"
+          class="btn btn--primary js-rent-submit"
+          {% if wallet_balance is None %}data-wallet-disabled="1"{% endif %}
+          {% if not selected_slot or wallet_balance is None %}disabled{% endif %}
+        >Оплатить</button>
+      </div>
+
+      <div class="item" style="background:#f8fafc;">
+        <div>
+          <div style="font-weight:900;">Онлайн-оплата</div>
+          <div class="muted" style="font-weight:900;">Карта / СБП (Т-Банк)</div>
+        </div>
+        <button
+          type="submit"
+          name="method"
+          value="online"
+          class="btn btn--primary js-rent-submit"
+          {% if not selected_slot %}disabled{% endif %}
+        >Перейти</button>
+      </div>
+    </div>
+
+    <div class="muted" style="font-weight:800; text-align:center;">
+      Слот подтверждается только после оплаты. Для онлайн-оплаты время на завершение — {{ payment_ttl_min }} минут.
+    </div>
+  </form>
+</section>
+
+<script>
+  (function() {
+    const slotInput = document.getElementById("rentSlotInput");
+    const slotLabel = document.getElementById("rentSlotLabel");
+    const submitBtns = Array.from(document.querySelectorAll(".js-rent-submit"));
+    const freeSlots = Array.from(document.querySelectorAll(".rent-slot--free"));
+    if (!slotInput || !slotLabel || !submitBtns.length || !freeSlots.length) return;
+
+    function applyState(btn) {
+      freeSlots.forEach(function(el) { el.classList.remove("is-selected"); });
+      if (btn) {
+        btn.classList.add("is-selected");
+        slotInput.value = btn.dataset.slot || "";
+        slotLabel.textContent = btn.dataset.label || "Не выбран";
+      } else {
+        slotInput.value = "";
+        slotLabel.textContent = "Не выбран";
+      }
+      submitBtns.forEach(function(el) {
+        if (el.value === "wallet" && el.hasAttribute("data-wallet-disabled")) return;
+        el.disabled = !slotInput.value;
+      });
+    }
+
+    freeSlots.forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        applyState(btn);
+      });
+    });
+
+    const preselected = freeSlots.find(function(btn) {
+      return (btn.dataset.slot || "") === slotInput.value;
+    });
+    applyState(preselected || null);
+  })();
+</script>
+{% endblock %}

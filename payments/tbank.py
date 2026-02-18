@@ -66,6 +66,7 @@ class TBankClient:
         fail_url: str,
         receipt: dict | None = None,
         data: dict | None = None,
+        redirect_due_date: str | None = None,
     ):
         payload = {
             "TerminalKey": self.terminal_key,
@@ -82,6 +83,8 @@ class TBankClient:
             payload["DATA"] = data
         if receipt:
             payload["Receipt"] = receipt
+        if redirect_due_date:
+            payload["RedirectDueDate"] = redirect_due_date
 
         payload["Token"] = self._token(payload)
 

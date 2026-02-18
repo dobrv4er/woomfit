@@ -4,12 +4,24 @@ from django.urls import reverse
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 from django.db.models import Q
 from django.db import transaction
 
+from core.telegram_notify import notify_booking_canceled, notify_booking_created
+from core.legal import client_ip, is_checked
+from payments.receipt import build_receipt, receipt_item
+
 from .models import Session, Booking, PaymentIntent
+
+
+def _detail_url(session_id: int, notice: str | None = None) -> str:
+    url = reverse("schedule:detail", args=[session_id])
+    if notice:
+        return f"{url}?notice={notice}"
+    return url
 
 
 def _create_single_visit_membership(user):
@@ -139,9 +151,34 @@ def _sessions_for_day_loc(*, selected: date, loc: str, user):
     return sessions_list, booked_ids
 
 
+def _membership_sort_key(m):
+    # Сначала абонементы с ближайшим окончанием, бессрочные/неактивированные — в конце.
+    return (
+        1 if m.end_date is None else 0,
+        m.end_date or date.max,
+        m.created_at,
+    )
+
+
+def _group_memberships_for_payment(user):
+    from memberships.models import Membership
+
+    qs = (
+        Membership.objects
+        .filter(user=user, is_active=True)
+        .filter(Q(scope="") | Q(scope=Membership.Scope.GROUP))
+        .order_by("created_at")
+    )
+    memberships = [m for m in qs if m.can_book_group()]
+    memberships.sort(key=_membership_sort_key)
+    return memberships
+
+
 def schedule_list(request):
     today = timezone.localdate()
     selected = _parse_iso_date(request.GET.get("day") or "") or today
+    if selected < today:
+        selected = today
 
     loc = (request.GET.get("loc") or "").strip()
     locations = [x for x in getattr(__import__("django.conf").conf.settings, "WOOMFIT_LOCATIONS", []) if x]
@@ -149,7 +186,7 @@ def schedule_list(request):
         loc = locations[0]
 
     STRIP_N = 10
-    start_day = selected - timedelta(days=2)
+    start_day = today
     end_day = start_day + timedelta(days=STRIP_N - 1)
     days = _days_between(start_day, end_day)
 
@@ -165,6 +202,7 @@ def schedule_list(request):
             "days": days,
             "strip_start": start_day.isoformat(),
             "strip_end": end_day.isoformat(),
+            "today_iso": today.isoformat(),
             "sessions": sessions_list,
             "booked_ids": booked_ids,
         },
@@ -174,6 +212,8 @@ def schedule_list(request):
 def schedule_fragment(request):
     today = timezone.localdate()
     selected = _parse_iso_date(request.GET.get("day") or "") or today
+    if selected < today:
+        selected = today
     loc = (request.GET.get("loc") or "").strip()
 
     sessions_list, booked_ids = _sessions_for_day_loc(selected=selected, loc=loc, user=request.user)
@@ -260,14 +300,7 @@ def session_detail(request, session_id: int):
 
     memberships = []
     if request.user.is_authenticated and not is_full and state not in ("booked", "waitlist"):
-        from memberships.models import Membership
-        qs = (
-            Membership.objects
-            .filter(user=request.user, is_active=True)
-            .filter(Q(scope="") | Q(scope=Membership.Scope.GROUP))
-            .order_by("end_date", "-created_at")
-        )
-        memberships = [m for m in qs if m.can_book_group()]
+        memberships = _group_memberships_for_payment(request.user)
 
     return render(
         request,
@@ -329,20 +362,19 @@ def session_choose_payment(request, session_id: int):
                 return redirect("schedule:detail", session_id=s.id)
 
             _set_booked(user=request.user, session=s, membership=m)
+            notify_booking_created(
+                user=request.user,
+                session=s,
+                source=f"Абонемент: {m.title}",
+            )
             messages.success(request, "Вы записались")
-            return redirect("schedule:detail", session_id=s.id)
+            return redirect(_detail_url(s.id, notice="booked"))
 
         messages.error(request, "Выберите способ оплаты")
         return redirect("schedule:detail", session_id=s.id)
 
     # GET fallback
-    qs = (
-        Membership.objects
-        .filter(user=request.user, is_active=True)
-        .filter(Q(scope="") | Q(scope=Membership.Scope.GROUP))
-        .order_by("end_date", "-created_at")
-    )
-    memberships = [m for m in qs if m.can_book_group()]
+    memberships = _group_memberships_for_payment(request.user)
 
     return render(
         request,
@@ -368,7 +400,8 @@ def session_pay(request, session_id: int):
     from django.conf import settings
     amount_rub = int(getattr(settings, "WOOMFIT_DROPIN_GROUP_PRICE_RUB", 700) or 700)
 
-    from wallet.models import Wallet, WalletTx
+    from wallet.models import Wallet
+    from wallet.services import debit
     from decimal import Decimal
 
     wallet, _ = Wallet.objects.get_or_create(user=request.user)
@@ -376,29 +409,44 @@ def session_pay(request, session_id: int):
 
     if request.method == "POST":
         method = (request.POST.get("method") or "").strip()
+        if method not in {"wallet", "online"}:
+            messages.error(request, "Выберите способ оплаты")
+            return redirect("schedule:pay", session_id=s.id)
 
-        intent = PaymentIntent.objects.create(
-            user=request.user,
-            session=s,
-            amount_rub=amount_rub,
-            status=PaymentIntent.Status.NEW,
-        )
+        offer_ok = is_checked(request, "agree_offer")
+        pd_ok = is_checked(request, "agree_personal_data")
+        if not offer_ok or not pd_ok:
+            messages.error(
+                request,
+                "Для оплаты необходимо принять публичную оферту и согласие на обработку персональных данных.",
+            )
+            return redirect("schedule:pay", session_id=s.id)
 
         if method == "wallet":
             if wallet.balance < Decimal(str(amount_rub)):
                 messages.error(request, "Недостаточно средств в кошельке")
                 return redirect("schedule:pay", session_id=s.id)
 
-            WalletTx.objects.create(
-                wallet=wallet,
-                kind=WalletTx.Kind.DEBIT,
-                amount=Decimal(str(amount_rub)),
-                reason=f"Оплата разового занятия: {s.title} ({timezone.localtime(s.start_at).strftime('%d.%m %H:%M')})",
-            )
+            try:
+                debit(
+                    request.user,
+                    Decimal(str(amount_rub)),
+                    reason=f"Оплата разового занятия: {s.title} ({timezone.localtime(s.start_at).strftime('%d.%m %H:%M')})",
+                )
+            except ValidationError as e:
+                messages.error(request, str(e) or "Не удалось списать средства из кошелька")
+                return redirect("schedule:pay", session_id=s.id)
 
-            intent.status = PaymentIntent.Status.PAID
-            intent.paid_at = timezone.now()
-            intent.save(update_fields=["status", "paid_at"])
+            intent = PaymentIntent.objects.create(
+                user=request.user,
+                session=s,
+                amount_rub=amount_rub,
+                status=PaymentIntent.Status.PAID,
+                paid_at=timezone.now(),
+                tb_status="WALLET_PAID",
+                legal_accepted_at=timezone.now(),
+                legal_accept_ip=client_ip(request),
+            )
 
             # Loyalty should grow only once, at the moment of real payment.
             from loyalty.services import add_spent
@@ -408,12 +456,26 @@ def session_pay(request, session_id: int):
             m = _create_single_visit_membership(request.user)
             m.consume_visit()
             _set_booked(user=request.user, session=s, membership=m)
+            notify_booking_created(
+                user=request.user,
+                session=s,
+                source="Разовая оплата (кошелёк)",
+            )
 
             messages.success(request, "Оплачено. Вы записаны")
-            return redirect("schedule:detail", session_id=s.id)
+            return redirect(_detail_url(s.id, notice="booked"))
 
         if method == "online":
             from payments.tbank import TBankClient
+
+            intent = PaymentIntent.objects.create(
+                user=request.user,
+                session=s,
+                amount_rub=amount_rub,
+                status=PaymentIntent.Status.NEW,
+                legal_accepted_at=timezone.now(),
+                legal_accept_ip=client_ip(request),
+            )
 
             client = TBankClient(settings.TBANK_TERMINAL_KEY, settings.TBANK_PASSWORD, settings.TBANK_IS_TEST)
 
@@ -422,19 +484,10 @@ def session_pay(request, session_id: int):
             fail_url = request.build_absolute_uri(reverse("schedule:pay_fail", args=[intent.id]))
 
             amount_kopeks = int(amount_rub) * 100
-            receipt = {
-                "Email": (getattr(request.user, "email", "") or "").strip() or "client@example.com",
-                "Taxation": settings.TBANK_TAXATION,
-                "Items": [
-                    {
-                        "Name": f"Разовое посещение: {s.title}"[:128],
-                        "Price": amount_kopeks,
-                        "Quantity": 1,
-                        "Amount": amount_kopeks,
-                        "Tax": settings.TBANK_ITEM_TAX,
-                    }
-                ],
-            }
+            receipt = build_receipt(
+                request.user,
+                [receipt_item(name=f"Разовое посещение: {s.title}", price_kopeks=amount_kopeks, quantity=1)],
+            )
 
             pay = client.init_payment(
                 order_id=f"S-{intent.id}",
@@ -458,9 +511,6 @@ def session_pay(request, session_id: int):
             intent.save(update_fields=["status", "tb_status"])
             return render(request, "payments/fail.html", {"error": pay})
 
-        messages.error(request, "Выберите способ оплаты")
-        return redirect("schedule:pay", session_id=s.id)
-
     return render(
         request,
         "schedule/pay.html",
@@ -475,6 +525,9 @@ def session_pay(request, session_id: int):
 @login_required
 def session_pay_success(request, intent_id: int):
     intent = get_object_or_404(PaymentIntent, id=intent_id, user=request.user)
+    if intent.status == PaymentIntent.Status.PAID:
+        messages.success(request, "Оплачено. Вы записаны")
+        return redirect(_detail_url(intent.session_id, notice="booked"))
     return render(request, "schedule/pay_success.html", {"intent": intent, "s": intent.session})
 
 
@@ -494,11 +547,18 @@ def unbook_session(request, session_id: int):
         messages.error(request, "Отмена возможна не позднее чем за 2 часа до начала.")
         return redirect(request.META.get("HTTP_REFERER", reverse("schedule:list")))
 
+    had_membership = bool(booking.membership_id)
+
     if booking.membership:
         booking.membership.refund_visit()
 
     booking.cancel()
     _invite_next_waiter(s)
+    notify_booking_canceled(
+        user=request.user,
+        session=s,
+        reason="Возврат посещения: да" if had_membership else "Возврат посещения: нет",
+    )
 
     messages.success(request, "Запись отменена. Посещение вернулось на абонемент (если было).")
     return redirect(request.META.get("HTTP_REFERER", reverse("schedule:list")))

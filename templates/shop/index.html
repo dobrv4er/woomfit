@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Магазин — WOOM FIT{% endblock %}
 
+{% block topbar_left %}
+  <a class="btn btn--ghost" style="padding:8px 10px; border-radius:14px;" href="{% url 'core:home' %}">←</a>
+{% endblock %}
+
 {% block topbar_right %}
   <a class="btn btn--ghost" style="padding:8px 10px; border-radius:14px;" href="{% url 'shop:cart' %}">🛒{% if cart.count %} ({{ cart.count }}){% endif %}</a>
 {% endblock %}

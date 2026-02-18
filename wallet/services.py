@@ -1,6 +1,7 @@
 from decimal import Decimal
 from django.db import transaction
 from django.core.exceptions import ValidationError
+from django.utils.html import escape
 from core.telegram_notify import tg_send
 from .models import Wallet, WalletTx
 
@@ -38,13 +39,14 @@ def topup(user, amount: Decimal, reason: str = "") -> WalletTx:
     )
     w.refresh_from_db(fields=["balance"])
 
-    who = (user.get_full_name() or user.username or str(user)).strip()
+    who = escape((user.get_full_name() or str(user)).strip() or "—")
+    details = escape(reason or "—")
     tg_send(
         "➕ <b>Кошелёк: пополнение</b>\n"
         f"Клиент: <b>{who}</b>\n"
         f"Сумма: <b>{amount}</b>\n"
         f"Баланс: <b>{w.balance}</b>\n"
-        f"Причина: {reason or '—'}"
+        f"Детали: <b>{details}</b>"
     )
     return tx
 
@@ -66,13 +68,14 @@ def debit(user, amount: Decimal, reason: str = "") -> WalletTx:
     )
     w.refresh_from_db(fields=["balance"])
 
-    who = (user.get_full_name() or user.username or str(user)).strip()
+    who = escape((user.get_full_name() or str(user)).strip() or "—")
+    details = escape(reason or "—")
     tg_send(
         "➖ <b>Кошелёк: списание</b>\n"
         f"Клиент: <b>{who}</b>\n"
         f"Сумма: <b>{amount}</b>\n"
         f"Баланс: <b>{w.balance}</b>\n"
-        f"Причина: {reason or '—'}"
+        f"Детали: <b>{details}</b>"
     )
     return tx
 
@@ -92,12 +95,13 @@ def refund(user, amount: Decimal, reason: str = "") -> WalletTx:
     )
     w.refresh_from_db(fields=["balance"])
 
-    who = (user.get_full_name() or user.username or str(user)).strip()
+    who = escape((user.get_full_name() or str(user)).strip() or "—")
+    details = escape(reason or "—")
     tg_send(
         "↩️ <b>Кошелёк: возврат</b>\n"
         f"Клиент: <b>{who}</b>\n"
         f"Сумма: <b>{amount}</b>\n"
         f"Баланс: <b>{w.balance}</b>\n"
-        f"Причина: {reason or '—'}"
+        f"Детали: <b>{details}</b>"
     )
     return tx

@@ -12,7 +12,7 @@ class WalletTxInline(admin.TabularInline):
 @admin.register(Wallet)
 class WalletAdmin(admin.ModelAdmin):
     list_display = ("id", "user", "balance", "updated_at")
-    search_fields = ("user__username", "user__first_name", "user__last_name")
+    search_fields = ("user__full_name", "user__phone")
     inlines = [WalletTxInline]
 
 
@@ -20,6 +20,6 @@ class WalletAdmin(admin.ModelAdmin):
 class WalletTxAdmin(admin.ModelAdmin):
     list_display = ("id", "wallet", "kind", "amount", "reason", "created_at")
     list_filter = ("kind", "created_at")
-    search_fields = ("wallet__user__username", "reason")
+    search_fields = ("wallet__user__full_name", "wallet__user__phone", "reason")
     readonly_fields = ("created_at",)
     ordering = ("-created_at",)
