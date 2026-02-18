@@ -29,6 +29,26 @@ docker compose up --build -d
 docker compose down
 ```
 
+## Если не запускается на Windows
+Частая причина: `CRLF` в `entrypoint.sh` (ошибка вида `bad interpreter: /bin/sh^M`).
+Также проект по умолчанию рассчитан на запуск через `docker compose` (а не `python manage.py runserver` напрямую).
+
+В этом репозитории уже добавлена защита:
+- `.gitattributes` фиксирует `LF` для `*.sh`;
+- `docker-compose.yml` перед стартом удаляет `CRLF` из `/app/entrypoint.sh`.
+
+После обновления репозитория выполните:
+```powershell
+docker compose down -v
+docker compose up --build
+```
+
+Если всё ещё не стартует, пришлите логи:
+```powershell
+docker compose logs web --tail=200
+docker compose logs db --tail=200
+```
+
 ## HTTPS (домен + Let's Encrypt)
 Нужен публичный сервер с доменом и открытыми портами `80` и `443`.
 
