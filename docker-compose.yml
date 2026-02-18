@@ -34,8 +34,9 @@ services:
       - /bin/sh
       - -c
       - |
-        sed -i 's/\r$//' /app/entrypoint.sh
-        exec /app/entrypoint.sh
+        tr -d '\r' < /app/entrypoint.sh > /tmp/entrypoint.sh
+        chmod +x /tmp/entrypoint.sh
+        exec /tmp/entrypoint.sh
     restart: unless-stopped
     environment:
       TZ: Asia/Yekaterinburg
