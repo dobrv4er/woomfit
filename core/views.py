@@ -10,20 +10,30 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
 
+from loyalty.services import get_bonus_balance
 from core.telegram_notify import notify_rent_request_paid
 from schedule.models import Booking, Trainer, Session, RentPaymentIntent, RentRequest
 
 
 def home(request):
     my_bookings = []
+    bonus_balance = Decimal("0.00")
     if request.user.is_authenticated:
         my_bookings = (
             Booking.objects.select_related("session")
             .filter(user=request.user, booking_status=Booking.Status.BOOKED)
             .order_by("session__start_at")
         )
+        bonus_balance = get_bonus_balance(request.user)
 
-    return render(request, "core/home.html", {"my_bookings": my_bookings})
+    return render(
+        request,
+        "core/home.html",
+        {
+            "my_bookings": my_bookings,
+            "bonus_balance": bonus_balance,
+        },
+    )
 
 
 def _legal_meta() -> dict:

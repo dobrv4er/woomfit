@@ -1,30 +1,23 @@
 from decimal import Decimal
-from loyalty.services import get_discount_percent, apply_discount
-from loyalty.services import add_spent
-from wallet.services import debit
+from loyalty.services import pay_with_wallet_bonus
 
 
-def pay_with_wallet(user, base_amount: Decimal, reason: str):
-    """
-    Возвращает dict:
-    {
-      "base": Decimal,
-      "discount_percent": int,
-      "final": Decimal,
-      "tx": WalletTx
-    }
-    """
-    disc = get_discount_percent(user)
-    final_amount = apply_discount(base_amount, disc)
+def pay_with_wallet(
+    user,
+    base_amount: Decimal,
+    reason: str,
+    *,
+    source_type: str,
+    source_id: int,
+    bonus_eligible_amount: Decimal | None = None,
+):
+    eligible_amount = base_amount if bonus_eligible_amount is None else bonus_eligible_amount
 
-    tx = debit(user, final_amount, reason=reason)
-
-    # Increase lifetime spend after successful payment.
-    add_spent(user, final_amount)
-
-    return {
-        "base": base_amount,
-        "discount_percent": disc,
-        "final": final_amount,
-        "tx": tx,
-    }
+    return pay_with_wallet_bonus(
+        user=user,
+        total_amount=base_amount,
+        bonus_eligible_amount=eligible_amount,
+        reason=reason,
+        source_type=source_type,
+        source_id=source_id,
+    )

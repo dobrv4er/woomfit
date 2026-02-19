@@ -50,6 +50,17 @@
         <div class="muted">Итого к оплате</div>
         <div style="font-size:22px;">{{ total_rub }} руб.</div>
       </div>
+      {% if user.is_authenticated %}
+        <div class="muted" style="margin-top:8px; font-weight:800;">
+          Бонусы: {{ bonus_balance }} ₽.
+          {% if membership_total_rub > 0 %}
+            Автосписание бонусами: до {{ bonus_apply_rub }} ₽ (лимит {{ bonus_cap_rub }} ₽), из кошелька спишется {{ wallet_cash_needed_rub }} ₽.
+            Кэшбек 5% начисляется только если абонементы в заказе оплачены без бонусов.
+          {% else %}
+            Бонусы применяются только к абонементам.
+          {% endif %}
+        </div>
+      {% endif %}
 
       <div style="margin-top:14px; display:grid; gap:10px;">
         <form method="post" action="{% url 'orders:checkout' %}" style="display:grid; gap:10px;">
@@ -78,7 +89,7 @@
           >
             Оплатить кошельком
             {% if wallet_balance is not None %}
-              (баланс {{ wallet_balance }} ₽)
+              (баланс {{ wallet_balance }} ₽, спишется {{ wallet_cash_needed_rub }} ₽)
             {% endif %}
           </button>
         </form>
@@ -89,7 +100,7 @@
           </div>
         {% elif not can_pay_wallet and total_rub > 0 %}
           <div class="muted" style="text-align:center; font-weight:800;">
-            Недостаточно средств в кошельке. Пополнить можно через товары «Пополнение кошелька».
+            Недостаточно средств в кошельке для остатка {{ wallet_cash_needed_rub }} ₽. Пополнить можно через товары «Пополнение кошелька».
           </div>
         {% endif %}
       </div>

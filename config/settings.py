@@ -91,7 +91,7 @@ INSTALLED_APPS = [
     "payments",
     "crmdata",
     "memberships",
-    "loyalty.apps.LoyaltyConfig",
+    "loyalty.apps.CashbackConfig",
 
 
     # ✅ новости
