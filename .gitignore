@@ -24,6 +24,8 @@ staticfiles/
 media/
 certbot/conf/
 certbot/www/
+certs/*
+!certs/.gitkeep
 
 # IDE / OS
 .idea/
