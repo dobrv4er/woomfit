@@ -58,13 +58,14 @@ DJANGO_DEBUG=0
 DJANGO_ALLOWED_HOSTS=ваш-домен.ru
 DJANGO_CSRF_TRUSTED_ORIGINS=https://ваш-домен.ru
 NGINX_HTTP_PORT=80
-SSL_DOMAIN=ваш-домен.ru
+SSL_CERT_PATH=./certs/ваш-домен.ru/fullchain.pem
+SSL_KEY_PATH=./certs/ваш-домен.ru/privkey.pem
 ```
 
-### 2) Положите сертификаты в `certs/<домен>`
-Нужные итоговые файлы:
-- `certs/ваш-домен.ru/privkey.pem`
+### 2) Подготовьте файлы сертификата и ключа
+В примере выше используются пути:
 - `certs/ваш-домен.ru/fullchain.pem`
+- `certs/ваш-домен.ru/privkey.pem`
 
 Если у вас выданы `certificate.key`, `certificate.crt`, `certificate_ca.crt`, соберите на Windows (PowerShell):
 ```powershell

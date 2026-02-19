@@ -22,8 +22,6 @@ ENV/
 *.log
 staticfiles/
 media/
-certbot/conf/
-certbot/www/
 certs/*
 !certs/.gitkeep
 
