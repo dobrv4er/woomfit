@@ -1,6 +1,5 @@
 from decimal import Decimal
 
-from django.conf import settings
 from django.contrib import messages
 from django.shortcuts import render, redirect, get_object_or_404
 
@@ -134,7 +133,6 @@ def cart_view(request):
             "total_rub": total_rub,
             "wallet_balance": wallet_balance,
             "can_pay_wallet": can_pay_wallet,
-            "tbank_terminal_key": getattr(settings, "TBANK_TERMINAL_KEY", ""),
         },
     )
 
