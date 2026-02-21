@@ -21,7 +21,12 @@
 
   <div style="height:12px;"></div>
 
-  <form method="post" class="card">
+  <form
+    method="post"
+    class="card"
+    id="schedulePayForm"
+    data-terminal-key="{{ tbank_terminal_key|default:''|escape }}"
+  >
     {% csrf_token %}
 
     <div class="item" style="background:#f8fafc;">
@@ -39,8 +44,13 @@
         <div style="font-weight:900;">Онлайн-оплата</div>
         <div class="muted" style="font-weight:900;">Карта / СБП (Т-Банк)</div>
       </div>
-      <button class="btn btn--primary" type="submit" name="method" value="online">Перейти</button>
+      <button id="schedulePayFallbackBtn" class="btn btn--primary" type="submit" name="method" value="online">Перейти</button>
     </div>
+    <div
+      id="tbankWidgetSchedulePay"
+      style="display:grid; min-height:52px; border-radius:14px; overflow:hidden; margin-top:10px;"
+    ></div>
+    <div id="tbankWidgetSchedulePayError" class="muted" style="font-weight:800; text-align:center;"></div>
 
     <div style="height:12px;"></div>
     <label style="display:flex; gap:8px; align-items:flex-start; font-weight:800; color:#334155; font-size:13px;">
@@ -62,4 +72,73 @@
       Если вы купите абонемент в магазине, запись на групповые занятия будет без доплат.
     </div>
   </form>
+  <script>
+    window.onPaymentIntegrationLoad = function() {};
+    (function() {
+      const form = document.getElementById("schedulePayForm");
+      const fallbackBtn = document.getElementById("schedulePayFallbackBtn");
+      const errorNode = document.getElementById("tbankWidgetSchedulePayError");
+      if (!form || !fallbackBtn) return;
+
+      const terminalKey = (form.getAttribute("data-terminal-key") || "").trim();
+      if (!terminalKey) return;
+
+      function setError(text) {
+        if (!errorNode) return;
+        errorNode.textContent = text || "";
+      }
+
+      async function startPayment() {
+        const offer = form.querySelector('input[name="agree_offer"]');
+        const pd = form.querySelector('input[name="agree_personal_data"]');
+        if (offer && !offer.checked) {
+          throw new Error("Примите публичную оферту перед оплатой.");
+        }
+        if (pd && !pd.checked) {
+          throw new Error("Подтвердите согласие на обработку персональных данных.");
+        }
+
+        const payload = new FormData(form);
+        payload.set("method", "online");
+        payload.set("integrationjs", "1");
+
+        const response = await fetch(window.location.href, {
+          method: "POST",
+          body: payload,
+          headers: {"X-Requested-With": "XMLHttpRequest"},
+        });
+
+        let data = {};
+        try {
+          data = await response.json();
+        } catch (e) {}
+
+        if (!response.ok || !data.paymentUrl) {
+          throw new Error((data && data.error) || "Не удалось создать оплату в T-Bank.");
+        }
+        return data.paymentUrl;
+      }
+
+      window.onPaymentIntegrationLoad = async function() {
+        if (typeof PaymentIntegration === "undefined") return;
+        try {
+          const integration = await PaymentIntegration.init({
+            terminalKey: terminalKey,
+            language: "ru",
+          });
+          await integration.payments.setPaymentStartCallback(async function() {
+            setError("");
+            return startPayment();
+          });
+          const payment = await integration.payments.create("schedule-dropin", {});
+          await payment.mount("tbankWidgetSchedulePay");
+          fallbackBtn.style.display = "none";
+        } catch (error) {
+          setError("Виджет T-Bank недоступен, используйте кнопку оплаты.");
+          console.error(error);
+        }
+      };
+    })();
+  </script>
+  <script src="https://integrationjs.tbank.ru/integration.js" onload="onPaymentIntegrationLoad()" async></script>
 {% endblock %}

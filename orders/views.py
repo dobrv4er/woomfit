@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
+from django.http import JsonResponse
 from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.utils import timezone
@@ -18,6 +19,14 @@ from wallet.services import debit, get_wallet
 
 from .models import Order, OrderItem
 from .services import fulfill_order
+
+LEGAL_REQUIRED_TEXT = (
+    "Для оплаты необходимо принять публичную оферту и согласие на обработку персональных данных."
+)
+
+
+def _integrationjs_requested(request) -> bool:
+    return (request.POST.get("integrationjs") or "").strip() == "1"
 
 
 def _build_tbank_receipt_for_order(request, order: Order, cart_items: list, total_kopeks: int) -> dict:
@@ -67,24 +76,28 @@ def _checkout_legal_ok(request) -> bool:
     offer_ok = is_checked(request, "agree_offer")
     pd_ok = is_checked(request, "agree_personal_data")
     if not offer_ok or not pd_ok:
-        messages.error(
-            request,
-            "Для оплаты необходимо принять публичную оферту и согласие на обработку персональных данных.",
-        )
+        messages.error(request, LEGAL_REQUIRED_TEXT)
         return False
     return True
 
 
 @login_required
 def checkout(request):
+    wants_json = _integrationjs_requested(request)
     if request.method != "POST":
+        if wants_json:
+            return JsonResponse({"error": "Метод не поддерживается."}, status=405)
         return redirect("shop:cart")
     if not _checkout_legal_ok(request):
+        if wants_json:
+            return JsonResponse({"error": LEGAL_REQUIRED_TEXT}, status=400)
         return redirect("shop:cart")
 
     cart = Cart(request)
     items = list(cart)
     if not items:
+        if wants_json:
+            return JsonResponse({"error": "Корзина пуста."}, status=400)
         return redirect("shop:cart")
 
     product_ids = [int(it.product_id) for it in items]
@@ -116,6 +129,8 @@ def checkout(request):
         order.save(update_fields=["status", "tb_status"])
         fulfill_order(order)
         cart.clear()
+        if wants_json:
+            return JsonResponse({"paymentUrl": request.build_absolute_uri(reverse("payments:success"))})
         return redirect("payments:success")
 
     client = TBankClient(settings.TBANK_TERMINAL_KEY, settings.TBANK_PASSWORD, settings.TBANK_IS_TEST)
@@ -135,6 +150,7 @@ def checkout(request):
         success_url=success_url,
         fail_url=fail_url,
         receipt=receipt,
+        data={"connection_type": "Widget"} if wants_json else None,
     )
 
     if pay.get("Success"):
@@ -143,11 +159,18 @@ def checkout(request):
         order.status = "payment_pending"
         order.save(update_fields=["tb_payment_id", "tb_status", "status"])
         cart.clear()
+        if wants_json:
+            payment_url = str(pay.get("PaymentURL") or "").strip()
+            if not payment_url:
+                return JsonResponse({"error": "Платёж создан без ссылки на оплату."}, status=502)
+            return JsonResponse({"paymentUrl": payment_url, "paymentId": order.tb_payment_id})
         return redirect(pay["PaymentURL"])
 
     order.status = "canceled"
     order.tb_status = str(pay.get("Status") or "")
     order.save(update_fields=["status", "tb_status"])
+    if wants_json:
+        return JsonResponse({"error": "Не удалось создать платёж в T-Bank.", "details": pay}, status=400)
     return render(request, "payments/fail.html", {"error": pay})
 
 

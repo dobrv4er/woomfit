@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
+from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 from django.db.models import Q
@@ -388,12 +389,20 @@ def session_choose_payment(request, session_id: int):
 def session_pay(request, session_id: int):
     """Оплата разового занятия: кошелёк или онлайн."""
     s = get_object_or_404(Session, id=session_id)
+    wants_json = request.method == "POST" and (request.POST.get("integrationjs") or "").strip() == "1"
+
+    def _json_error(message: str, status: int = 400):
+        return JsonResponse({"error": message}, status=status)
 
     if getattr(s, "kind", "group") != "group":
+        if wants_json:
+            return _json_error("Эта тренировка недоступна для оплаты")
         messages.error(request, "Эта тренировка недоступна для оплаты")
         return redirect("schedule:list")
 
     if getattr(s, "seats_left", 0) <= 0:
+        if wants_json:
+            return _json_error("Свободных мест нет")
         messages.error(request, "Свободных мест нет")
         return redirect("schedule:detail", session_id=s.id)
 
@@ -410,12 +419,18 @@ def session_pay(request, session_id: int):
     if request.method == "POST":
         method = (request.POST.get("method") or "").strip()
         if method not in {"wallet", "online"}:
+            if wants_json:
+                return _json_error("Выберите способ оплаты")
             messages.error(request, "Выберите способ оплаты")
             return redirect("schedule:pay", session_id=s.id)
 
         offer_ok = is_checked(request, "agree_offer")
         pd_ok = is_checked(request, "agree_personal_data")
         if not offer_ok or not pd_ok:
+            if wants_json:
+                return _json_error(
+                    "Для оплаты необходимо принять публичную оферту и согласие на обработку персональных данных."
+                )
             messages.error(
                 request,
                 "Для оплаты необходимо принять публичную оферту и согласие на обработку персональных данных.",
@@ -424,6 +439,8 @@ def session_pay(request, session_id: int):
 
         if method == "wallet":
             if wallet.balance < Decimal(str(amount_rub)):
+                if wants_json:
+                    return _json_error("Недостаточно средств в кошельке")
                 messages.error(request, "Недостаточно средств в кошельке")
                 return redirect("schedule:pay", session_id=s.id)
 
@@ -434,6 +451,8 @@ def session_pay(request, session_id: int):
                     reason=f"Оплата разового занятия: {s.title} ({timezone.localtime(s.start_at).strftime('%d.%m %H:%M')})",
                 )
             except ValidationError as e:
+                if wants_json:
+                    return _json_error(str(e) or "Не удалось списать средства из кошелька")
                 messages.error(request, str(e) or "Не удалось списать средства из кошелька")
                 return redirect("schedule:pay", session_id=s.id)
 
@@ -497,6 +516,7 @@ def session_pay(request, session_id: int):
                 success_url=success_url,
                 fail_url=fail_url,
                 receipt=receipt,
+                data={"connection_type": "Widget"} if wants_json else None,
             )
 
             if pay.get("Success"):
@@ -504,11 +524,18 @@ def session_pay(request, session_id: int):
                 intent.tb_status = str(pay.get("Status") or "")
                 intent.status = PaymentIntent.Status.PENDING
                 intent.save(update_fields=["tb_payment_id", "tb_status", "status"])
+                if wants_json:
+                    payment_url = str(pay.get("PaymentURL") or "").strip()
+                    if not payment_url:
+                        return _json_error("Платёж создан без ссылки на оплату.", status=502)
+                    return JsonResponse({"paymentUrl": payment_url, "paymentId": intent.tb_payment_id})
                 return redirect(pay["PaymentURL"])
 
             intent.status = PaymentIntent.Status.CANCELED
             intent.tb_status = str(pay.get("Status") or "")
             intent.save(update_fields=["status", "tb_status"])
+            if wants_json:
+                return JsonResponse({"error": "Не удалось создать оплату в T-Bank.", "details": pay}, status=400)
             return render(request, "payments/fail.html", {"error": pay})
 
     return render(
@@ -518,6 +545,7 @@ def session_pay(request, session_id: int):
             "s": s,
             "amount_rub": amount_rub,
             "wallet_balance": wallet_balance,
+            "tbank_terminal_key": getattr(settings, "TBANK_TERMINAL_KEY", ""),
         },
     )
 
