@@ -12,7 +12,6 @@ from django.db import transaction
 
 from core.telegram_notify import notify_booking_canceled, notify_booking_created
 from core.legal import client_ip, is_checked
-from loyalty.services import build_bonus_payment_plan, pay_with_wallet_bonus
 from payments.receipt import build_receipt, receipt_item
 
 from .models import Session, Booking, PaymentIntent
@@ -401,17 +400,12 @@ def session_pay(request, session_id: int):
     from django.conf import settings
     amount_rub = int(getattr(settings, "WOOMFIT_DROPIN_GROUP_PRICE_RUB", 700) or 700)
 
-    from wallet.services import get_wallet
+    from wallet.models import Wallet
+    from wallet.services import debit
     from decimal import Decimal
 
-    wallet = get_wallet(request.user)
-    wallet_balance = wallet.balance
-    total_amount = Decimal(str(amount_rub))
-    bonus_plan = build_bonus_payment_plan(
-        user=request.user,
-        total_amount=total_amount,
-        bonus_eligible_amount=total_amount,
-    )
+    wallet, _ = Wallet.objects.get_or_create(user=request.user)
+    wallet_balance = int(wallet.balance)
 
     if request.method == "POST":
         method = (request.POST.get("method") or "").strip()
@@ -429,40 +423,34 @@ def session_pay(request, session_id: int):
             return redirect("schedule:pay", session_id=s.id)
 
         if method == "wallet":
-            if wallet.balance < bonus_plan["cash_needed"]:
+            if wallet.balance < Decimal(str(amount_rub)):
                 messages.error(request, "Недостаточно средств в кошельке")
+                return redirect("schedule:pay", session_id=s.id)
+
+            try:
+                debit(
+                    request.user,
+                    Decimal(str(amount_rub)),
+                    reason=f"Оплата разового занятия: {s.title} ({timezone.localtime(s.start_at).strftime('%d.%m %H:%M')})",
+                )
+            except ValidationError as e:
+                messages.error(request, str(e) or "Не удалось списать средства из кошелька")
                 return redirect("schedule:pay", session_id=s.id)
 
             intent = PaymentIntent.objects.create(
                 user=request.user,
                 session=s,
                 amount_rub=amount_rub,
-                status=PaymentIntent.Status.NEW,
-                tb_status="WALLET_NEW",
+                status=PaymentIntent.Status.PAID,
+                paid_at=timezone.now(),
+                tb_status="WALLET_PAID",
                 legal_accepted_at=timezone.now(),
                 legal_accept_ip=client_ip(request),
             )
 
-            try:
-                pay_with_wallet_bonus(
-                    user=request.user,
-                    total_amount=total_amount,
-                    bonus_eligible_amount=total_amount,
-                    reason=f"Оплата разового занятия: {s.title} ({timezone.localtime(s.start_at).strftime('%d.%m %H:%M')})",
-                    source_type="session_wallet",
-                    source_id=intent.id,
-                )
-            except ValidationError as e:
-                intent.status = PaymentIntent.Status.CANCELED
-                intent.tb_status = "WALLET_DECLINED"
-                intent.save(update_fields=["status", "tb_status"])
-                messages.error(request, str(e) or "Не удалось списать средства из кошелька")
-                return redirect("schedule:pay", session_id=s.id)
-
-            intent.status = PaymentIntent.Status.PAID
-            intent.paid_at = timezone.now()
-            intent.tb_status = "WALLET_PAID"
-            intent.save(update_fields=["status", "paid_at", "tb_status"])
+            # Loyalty should grow only once, at the moment of real payment.
+            from loyalty.services import add_spent
+            add_spent(request.user, Decimal(str(amount_rub)))
 
             # ✅ разовый абонемент на 1 и сразу списание
             m = _create_single_visit_membership(request.user)
@@ -530,10 +518,6 @@ def session_pay(request, session_id: int):
             "s": s,
             "amount_rub": amount_rub,
             "wallet_balance": wallet_balance,
-            "bonus_balance": bonus_plan["bonus_available"],
-            "bonus_cap_rub": bonus_plan["bonus_cap"],
-            "bonus_apply_rub": bonus_plan["bonus_used"],
-            "wallet_cash_needed_rub": bonus_plan["cash_needed"],
         },
     )
 

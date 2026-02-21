@@ -3,7 +3,6 @@ from decimal import Decimal
 from django.contrib import messages
 from django.shortcuts import render, redirect, get_object_or_404
 
-from loyalty.services import build_bonus_payment_plan, get_bonus_balance
 from .cart import Cart
 from .models import Category, Product, TrialUse
 from wallet.services import get_wallet
@@ -111,16 +110,6 @@ def buy_now(request, product_id: int):
     return redirect(request.META.get("HTTP_REFERER", "shop:index"))
 
 
-def _membership_total_rub(items, products_by_id) -> int:
-    total = 0
-    for it in items:
-        p = products_by_id.get(int(it.product_id))
-        if not p or p.grant_kind != Product.GrantKind.MEMBERSHIP:
-            continue
-        total += int(it.total_price_rub)
-    return total
-
-
 def cart_view(request):
     cart = Cart(request)
     ids = [int(pid) for pid in cart.data.keys()]
@@ -128,27 +117,13 @@ def cart_view(request):
     products_by_id = {p.id: p for p in products}
     items = list(cart.items(products_by_id))
     total_rub = cart.total_rub(products_by_id)
-    membership_total_rub = _membership_total_rub(items, products_by_id)
 
     wallet_balance = None
-    bonus_balance = Decimal("0.00")
-    bonus_apply_rub = Decimal("0.00")
-    bonus_cap_rub = Decimal("0.00")
-    wallet_cash_needed_rub = Decimal(str(total_rub))
     can_pay_wallet = False
     if request.user.is_authenticated:
         wallet = get_wallet(request.user)
         wallet_balance = wallet.balance
-        bonus_balance = get_bonus_balance(request.user)
-        payment_plan = build_bonus_payment_plan(
-            user=request.user,
-            total_amount=Decimal(str(total_rub)),
-            bonus_eligible_amount=Decimal(str(membership_total_rub)),
-        )
-        bonus_apply_rub = payment_plan["bonus_used"]
-        bonus_cap_rub = payment_plan["bonus_cap"]
-        wallet_cash_needed_rub = payment_plan["cash_needed"]
-        can_pay_wallet = total_rub <= 0 or wallet_balance >= wallet_cash_needed_rub
+        can_pay_wallet = total_rub <= 0 or wallet_balance >= Decimal(str(total_rub))
 
     return render(
         request,
@@ -156,12 +131,7 @@ def cart_view(request):
         {
             "items": items,
             "total_rub": total_rub,
-            "membership_total_rub": membership_total_rub,
             "wallet_balance": wallet_balance,
-            "bonus_balance": bonus_balance,
-            "bonus_apply_rub": bonus_apply_rub,
-            "bonus_cap_rub": bonus_cap_rub,
-            "wallet_cash_needed_rub": wallet_cash_needed_rub,
             "can_pay_wallet": can_pay_wallet,
         },
     )

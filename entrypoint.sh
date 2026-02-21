@@ -29,6 +29,8 @@ if [ "${WOOMFIT_SEED_DEMO:-0}" = "1" ]; then
   python manage.py seed_demo || true
 fi
 
+python manage.py createsuperuser --noinput || true
+
 GUNICORN_WORKERS="${GUNICORN_WORKERS:-3}"
 GUNICORN_TIMEOUT="${GUNICORN_TIMEOUT:-120}"
 

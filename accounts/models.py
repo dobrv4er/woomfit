@@ -4,7 +4,8 @@ from django.db import models
 
 class User(AbstractUser):
     full_name = models.CharField("ФИО", max_length=255, blank=True)
-    phone = models.CharField("Телефон", max_length=32, blank=True)
+    email = models.EmailField(("email address"), blank=True,unique=True )
+    phone = models.CharField("Телефон", max_length=32, blank=True,unique=True)
     birth_date = models.DateField("Дата рождения", null=True, blank=True)
     club = models.CharField("Клуб", max_length=120, default="WOOM FIT")
     club_card = models.CharField("Карта", max_length=64, blank=True)

@@ -7,8 +7,6 @@ from django.utils import timezone
 from datetime import date
 
 from core.legal import client_ip
-from loyalty.models import CashbackBonus, CashbackBonusSpend
-from loyalty.services import get_bonus_balance
 from memberships.models import Membership
 from orders.models import Order
 from schedule.models import Booking, PaymentIntent
@@ -82,39 +80,6 @@ def _build_profile_journal(user):
                 "subtitle": tx.reason or "Без комментария",
                 "amount": amount,
                 "amount_class": amount_class,
-            }
-        )
-
-    cashback_bonuses = (
-        CashbackBonus.objects
-        .filter(user=user)
-        .order_by("-created_at")[:150]
-    )
-    for bonus in cashback_bonuses:
-        expires = timezone.localtime(bonus.expires_at).strftime("%d.%m.%Y")
-        events.append(
-            {
-                "at": bonus.created_at,
-                "title": "Начислен кэшбек",
-                "subtitle": f"Действует до {expires}",
-                "amount": f"+{bonus.amount} ₽",
-                "amount_class": "plus",
-            }
-        )
-
-    cashback_spends = (
-        CashbackBonusSpend.objects
-        .filter(user=user)
-        .order_by("-created_at")[:200]
-    )
-    for spend in cashback_spends:
-        events.append(
-            {
-                "at": spend.created_at,
-                "title": "Списаны бонусы",
-                "subtitle": spend.reason or "Оплата бонусами",
-                "amount": f"-{spend.amount} ₽",
-                "amount_class": "minus",
             }
         )
 
@@ -219,22 +184,12 @@ def _build_profile_journal(user):
 def profile(request):
     memberships = _get_unspent_memberships(request.user)
     journal_events = _build_profile_journal(request.user)
-    bonus_balance = get_bonus_balance(request.user)
-    bonus_next_expire_at = (
-        CashbackBonus.objects
-        .filter(user=request.user, remaining_amount__gt=0, expires_at__gt=timezone.now())
-        .order_by("expires_at")
-        .values_list("expires_at", flat=True)
-        .first()
-    )
     return render(
         request,
         "accounts/profile.html",
         {
             "memberships": memberships,
             "journal_events": journal_events,
-            "bonus_balance": bonus_balance,
-            "bonus_next_expire_at": bonus_next_expire_at,
             "today": timezone.localdate(),
         },
     )

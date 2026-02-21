@@ -9,13 +9,12 @@ from django.urls import reverse
 from django.utils import timezone
 
 from core.legal import client_ip, is_checked
-from loyalty.services import build_bonus_payment_plan, grant_cashback, pay_with_wallet_bonus
 from payments.receipt import build_receipt, receipt_item
 from payments.tbank import TBankClient
 from shop.cart import Cart
 from shop.models import Product
 
-from wallet.services import get_wallet
+from wallet.services import debit, get_wallet
 
 from .models import Order, OrderItem
 from .services import fulfill_order
@@ -62,16 +61,6 @@ def _cart_purchase_summary(cart_items: list, *, max_items: int = 5, max_len: int
     if len(summary) <= max_len:
         return summary
     return summary[: max_len - 1].rstrip() + "…"
-
-
-def _membership_total_from_cart_items(cart_items: list, products_by_id: dict[int, Product]) -> Decimal:
-    total = Decimal("0.00")
-    for it in cart_items:
-        prod = products_by_id.get(int(it.product_id))
-        if not prod or prod.grant_kind != Product.GrantKind.MEMBERSHIP:
-            continue
-        total += Decimal(str(int(it.total_price_rub)))
-    return total
 
 
 def _checkout_legal_ok(request) -> bool:
@@ -185,17 +174,10 @@ def checkout_wallet(request):
     products_by_id = {p.id: p for p in Product.objects.filter(id__in=product_ids)}
 
     total = sum(int(it.total_price_rub) for it in items)
-    total_amount = Decimal(str(total))
-    membership_total = _membership_total_from_cart_items(items, products_by_id)
-    payment_plan = build_bonus_payment_plan(
-        user=request.user,
-        total_amount=total_amount,
-        bonus_eligible_amount=membership_total,
-    )
 
-    # Проверяем баланс до создания заказа (UX), окончательная проверка — внутри pay_with_wallet_bonus() под транзакцией.
+    # Проверяем баланс до создания заказа (UX), но окончательная проверка будет внутри debit() под транзакцией.
     wallet = get_wallet(request.user)
-    if total > 0 and (wallet.balance or 0) < payment_plan["cash_needed"]:
+    if total > 0 and (wallet.balance or 0) < Decimal(str(total)):
         messages.error(request, "Недостаточно средств в кошельке.")
         return redirect("shop:cart")
 
@@ -229,14 +211,7 @@ def checkout_wallet(request):
     try:
         purchase_summary = _cart_purchase_summary(items)
         reason = f"Оплата заказа #{order.id}: {purchase_summary}" if purchase_summary else f"Оплата заказа #{order.id}"
-        payment_result = pay_with_wallet_bonus(
-            user=request.user,
-            total_amount=total_amount,
-            bonus_eligible_amount=membership_total,
-            reason=reason,
-            source_type="order_wallet",
-            source_id=order.id,
-        )
+        debit(request.user, Decimal(str(total)), reason=reason)
     except ValidationError as e:
         # Если дебет не прошёл — отменяем заказ и возвращаем корзину
         order.status = "canceled"
@@ -249,13 +224,5 @@ def checkout_wallet(request):
     order.tb_status = "WALLET_PAID"
     order.save(update_fields=["status", "tb_status"])
     fulfill_order(order)
-    if payment_result["bonus_used"] == Decimal("0.00"):
-        grant_cashback(
-            user=request.user,
-            base_amount=membership_total,
-            source_type="order",
-            source_id=order.id,
-            reason=f"Кэшбек за заказ #{order.id}",
-        )
     cart.clear()
     return redirect("payments:success")

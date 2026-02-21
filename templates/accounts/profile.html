@@ -8,16 +8,8 @@
     <div style="margin-top:6px; font-weight:900; font-size:22px;">
       {{ w.balance }} ₽
     </div>
-    <div style="margin-top:8px; font-weight:900; font-size:18px;">
-      Бонусы (кэшбек): {{ bonus_balance }} ₽
-    </div>
-    {% if bonus_next_expire_at %}
-      <div class="muted" style="margin-top:4px;">
-        Ближайшее сгорание бонусов: {{ bonus_next_expire_at|date:"d.m.Y" }}
-      </div>
-    {% endif %}
     <div class="muted" style="margin-top:6px;">
-      5% кэшбека за оплату абонементов без использования бонусов, списание бонусами до 30%, срок бонусов 4 месяца
+      Баланс обновляется автоматически после оплат и возвратов
     </div>
   </div>
 {% endwith %}

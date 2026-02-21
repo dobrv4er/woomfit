@@ -17,10 +17,10 @@ from core.telegram_notify import (
     notify_rent_request_paid,
     notify_session_payment,
 )
-from loyalty.services import grant_cashback
 from orders.models import Order
 from orders.services import fulfill_order
-from shop.models import Product
+
+from loyalty.services import add_spent
 
 from schedule.models import PaymentIntent, Booking, RentPaymentIntent, RentRequest, Session, Trainer
 
@@ -45,20 +45,6 @@ def _order_purchase_summary(order: Order, *, max_items: int = 5, max_len: int = 
     if len(summary) <= max_len:
         return summary
     return summary[: max_len - 1].rstrip() + "…"
-
-
-def _order_membership_total(order: Order) -> Decimal:
-    total = Decimal("0.00")
-    for item in order.items.select_related("product").all():
-        product = item.product
-        if not product or product.grant_kind != Product.GrantKind.MEMBERSHIP:
-            continue
-        qty = int(item.qty or 0)
-        price = int(item.unit_price_rub or 0)
-        if qty <= 0 or price <= 0:
-            continue
-        total += Decimal(str(price * qty))
-    return total
 
 
 def _create_single_visit_membership(user):
@@ -211,13 +197,7 @@ def tbank_webhook(request: HttpRequest):
                 if not was_paid:
                     fulfill_order(order)
                     if order.user_id:
-                        grant_cashback(
-                            user=order.user,
-                            base_amount=_order_membership_total(order),
-                            source_type="order",
-                            source_id=order.id,
-                            reason=f"Кэшбек за заказ #{order.id}",
-                        )
+                        add_spent(order.user, Decimal(str(order.total_rub)))
                     notify_order_payment(
                         user=order.user,
                         order_id=order.id,
@@ -245,8 +225,8 @@ def tbank_webhook(request: HttpRequest):
                         intent.paid_at = timezone.now()
                     intent.save(update_fields=["tb_status", "status", "paid_at"])
 
-                    if not first_time:
-                        return HttpResponse("OK", status=200, content_type="text/plain")
+                    if first_time:
+                        add_spent(intent.user, Decimal(str(intent.amount_rub)))
 
                     # после оплаты создаём абонемент на 1 посещение и сразу списываем
                     m = _create_single_visit_membership(intent.user)
@@ -265,17 +245,18 @@ def tbank_webhook(request: HttpRequest):
                         "invite_sent_at",
                         "invite_expires_at",
                     ])
-                    notify_session_payment(
-                        user=intent.user,
-                        session=intent.session,
-                        amount_rub=intent.amount_rub,
-                        method="Онлайн (T-Bank)",
-                    )
-                    notify_booking_created(
-                        user=intent.user,
-                        session=intent.session,
-                        source="Разовая оплата (онлайн)",
-                    )
+                    if first_time:
+                        notify_session_payment(
+                            user=intent.user,
+                            session=intent.session,
+                            amount_rub=intent.amount_rub,
+                            method="Онлайн (T-Bank)",
+                        )
+                        notify_booking_created(
+                            user=intent.user,
+                            session=intent.session,
+                            source="Разовая оплата (онлайн)",
+                        )
                     return HttpResponse("OK", status=200, content_type="text/plain")
 
                 elif status.upper() in ("CANCELED", "REJECTED", "DEADLINE_EXPIRED"):

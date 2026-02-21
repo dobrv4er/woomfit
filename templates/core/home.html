@@ -152,7 +152,7 @@ body{
 }
 
 
-/* ===== hero stats (кошелек/кэшбек) ===== */
+/* ===== hero stats (кошелек/лояльность) ===== */
 .hero__stats{
   margin-top: 8px;
   display: flex;
@@ -206,8 +206,9 @@ body{
         
 
         <span class="hero__pill">
-          🎁 <span class="mut">Бонусы:</span>
-          <b>{{ bonus_balance }}</b> ₽
+          🎁 <span class="mut">Скидка:</span>
+          <b>{{ request.user.loyalty.discount_percent }}%</b>
+          <span class="mut">({{ request.user.loyalty.tier }})</span>
         </span>
       </div>
     {% endif %}
