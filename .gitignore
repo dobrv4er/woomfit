@@ -32,3 +32,4 @@ certs/*
 
 # SQLite (if used)
 *.sqlite3
+/certs/
