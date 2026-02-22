@@ -32,11 +32,13 @@ def receipt_item(name: str, price_kopeks: int, quantity: int, amount_kopeks: int
     qty = int(quantity)
     price = int(price_kopeks)
     amount = int(amount_kopeks) if amount_kopeks is not None else price * qty
+    measurement_unit = (getattr(settings, "TBANK_ITEM_MEASUREMENT_UNIT", "шт") or "").strip() or "шт"
     return {
         "Name": str(name)[:128],
         "Price": price,
         "Quantity": qty,
         "Amount": amount,
+        "MeasurementUnit": measurement_unit,
         "Tax": settings.TBANK_ITEM_TAX,
         "PaymentMethod": settings.TBANK_ITEM_PAYMENT_METHOD,
         "PaymentObject": settings.TBANK_ITEM_PAYMENT_OBJECT,

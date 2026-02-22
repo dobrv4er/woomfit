@@ -121,6 +121,7 @@ TBANK_ITEM_TAX=none
 TBANK_FFD_VERSION=1.2
 TBANK_ITEM_PAYMENT_METHOD=full_payment
 TBANK_ITEM_PAYMENT_OBJECT=service
+TBANK_ITEM_MEASUREMENT_UNIT=шт
 
 # email-восстановление пароля
 DJANGO_EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
