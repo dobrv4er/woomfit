@@ -171,6 +171,9 @@
     if (!paymentIntegration || typeof paymentIntegration.mount !== "function") {
       throw new Error("Не удалось создать виджет оплаты T-Bank.");
     }
+    if (typeof paymentIntegration.updateWidgetTypes === "function") {
+      await paymentIntegration.updateWidgetTypes(["tpay", "sbp", "bnpl", "sberpay", "mirpay"]);
+    }
     await paymentIntegration.mount(options.container);
   }
 
@@ -211,8 +214,8 @@
       .then(function () {
         container.hidden = false;
         if (fallbackButton) {
-          fallbackButton.hidden = true;
-          fallbackButton.disabled = true;
+          fallbackButton.hidden = false;
+          fallbackButton.disabled = false;
         }
       })
       .catch(function (error) {
