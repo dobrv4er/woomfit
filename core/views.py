@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from core.telegram_notify import notify_rent_request_paid
 from payments.integrationjs import build_widget_init_data, is_widget_request
+from payments.tbank_urls import fail_url, notification_url, success_url
 from schedule.models import Booking, Trainer, Session, RentPaymentIntent, RentRequest
 
 
@@ -484,9 +485,19 @@ def rent(request):
             from payments.tbank import TBankClient
 
             client = TBankClient(settings.TBANK_TERMINAL_KEY, settings.TBANK_PASSWORD, settings.TBANK_IS_TEST)
-            notification_url = request.build_absolute_uri(reverse("payments:tbank_webhook"))
-            success_url = request.build_absolute_uri(reverse("core:rent_pay_success", args=[intent_for_redirect.id]))
-            fail_url = request.build_absolute_uri(reverse("core:rent_pay_fail", args=[intent_for_redirect.id]))
+            notify_url = notification_url(request)
+            ok_url = success_url(
+                request,
+                setting_name="TBANK_SUCCESS_URL",
+                view_name="core:rent_pay_success",
+                args=[intent_for_redirect.id],
+            )
+            no_url = fail_url(
+                request,
+                setting_name="TBANK_FAIL_URL",
+                view_name="core:rent_pay_fail",
+                args=[intent_for_redirect.id],
+            )
             amount_kopeks = int(RENT_PRICE_RUB) * 100
             receipt = build_receipt(
                 request.user if request.user.is_authenticated else None,
@@ -497,19 +508,19 @@ def rent(request):
                     order_id=f"R-{intent_for_redirect.id}",
                     amount_kopeks=amount_kopeks,
                     description=f"WOOM FIT rent intent #{intent_for_redirect.id}",
-                    notification_url=notification_url,
-                    success_url=success_url,
-                    fail_url=fail_url,
+                    notification_url=notify_url,
+                    success_url=ok_url,
+                    fail_url=no_url,
                     receipt=receipt,
                     redirect_due_date=intent_for_redirect.expires_at.isoformat(timespec="seconds"),
                     data=build_widget_init_data(request),
                 )
-            except Exception:
+            except Exception as exc:
                 intent_for_redirect.status = RentPaymentIntent.Status.CANCELED
                 intent_for_redirect.tb_status = "INIT_FAILED"
                 intent_for_redirect.save(update_fields=["status", "tb_status"])
                 if widget_request:
-                    return JsonResponse({"error": "Не удалось создать онлайн-оплату."}, status=400)
+                    return JsonResponse({"error": "Не удалось создать онлайн-оплату.", "details": str(exc)}, status=400)
                 messages.error(request, "Не удалось создать оплату. Попробуйте ещё раз.")
                 return redirect(f"{reverse('core:rent')}?week={selected_week.isoformat()}")
 

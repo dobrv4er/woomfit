@@ -13,6 +13,7 @@ from core.legal import client_ip, is_checked
 from payments.integrationjs import build_widget_init_data, is_widget_request
 from payments.receipt import build_receipt, receipt_item
 from payments.tbank import TBankClient
+from payments.tbank_urls import fail_url, notification_url, success_url
 from shop.cart import Cart
 from shop.models import Product
 
@@ -127,15 +128,15 @@ def checkout(request):
         fulfill_order(order)
         cart.clear()
         if widget_request:
-            success_url = request.build_absolute_uri(reverse("payments:success"))
-            return JsonResponse({"paymentUrl": success_url, "PaymentURL": success_url})
+            success_redirect_url = request.build_absolute_uri(reverse("payments:success"))
+            return JsonResponse({"paymentUrl": success_redirect_url, "PaymentURL": success_redirect_url})
         return redirect("payments:success")
 
     client = TBankClient(settings.TBANK_TERMINAL_KEY, settings.TBANK_PASSWORD, settings.TBANK_IS_TEST)
 
-    notification_url = request.build_absolute_uri(reverse("payments:tbank_webhook"))
-    success_url = request.build_absolute_uri(reverse("payments:success"))
-    fail_url = request.build_absolute_uri(reverse("payments:fail"))
+    notify_url = notification_url(request)
+    ok_url = success_url(request, setting_name="TBANK_SUCCESS_URL", view_name="payments:success")
+    no_url = fail_url(request, setting_name="TBANK_FAIL_URL", view_name="payments:fail")
 
     total_kopeks = int(total) * 100
     receipt = _build_tbank_receipt_for_order(request, order, items, total_kopeks)
@@ -145,19 +146,19 @@ def checkout(request):
             order_id=str(order.id),
             amount_kopeks=total_kopeks,  # ✅ копейки
             description=f"WOOM FIT order #{order.id}",
-            notification_url=notification_url,
-            success_url=success_url,
-            fail_url=fail_url,
+            notification_url=notify_url,
+            success_url=ok_url,
+            fail_url=no_url,
             receipt=receipt,
             data=build_widget_init_data(request),
         )
-    except Exception:
+    except Exception as exc:
         order.status = "canceled"
         order.tb_status = "INIT_FAILED"
         order.save(update_fields=["status", "tb_status"])
         if widget_request:
-            return JsonResponse({"error": "Не удалось создать онлайн-оплату."}, status=400)
-        return render(request, "payments/fail.html", {"error": {"Message": "Init failed"}})
+            return JsonResponse({"error": "Не удалось создать онлайн-оплату.", "details": str(exc)}, status=400)
+        return render(request, "payments/fail.html", {"error": {"Message": "Init failed", "Details": str(exc)}})
 
     payment_url = str(pay.get("PaymentURL") or "").strip()
     if pay.get("Success") and payment_url:

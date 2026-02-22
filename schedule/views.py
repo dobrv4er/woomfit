@@ -15,6 +15,7 @@ from core.telegram_notify import notify_booking_canceled, notify_booking_created
 from core.legal import client_ip, is_checked
 from payments.integrationjs import build_widget_init_data, is_widget_request
 from payments.receipt import build_receipt, receipt_item
+from payments.tbank_urls import fail_url, notification_url, success_url
 
 from .models import Session, Booking, PaymentIntent
 
@@ -493,9 +494,19 @@ def session_pay(request, session_id: int):
 
             client = TBankClient(settings.TBANK_TERMINAL_KEY, settings.TBANK_PASSWORD, settings.TBANK_IS_TEST)
 
-            notification_url = request.build_absolute_uri(reverse("payments:tbank_webhook"))
-            success_url = request.build_absolute_uri(reverse("schedule:pay_success", args=[intent.id]))
-            fail_url = request.build_absolute_uri(reverse("schedule:pay_fail", args=[intent.id]))
+            notify_url = notification_url(request)
+            ok_url = success_url(
+                request,
+                setting_name="TBANK_SUCCESS_URL",
+                view_name="schedule:pay_success",
+                args=[intent.id],
+            )
+            no_url = fail_url(
+                request,
+                setting_name="TBANK_FAIL_URL",
+                view_name="schedule:pay_fail",
+                args=[intent.id],
+            )
 
             amount_kopeks = int(amount_rub) * 100
             receipt = build_receipt(
@@ -508,19 +519,19 @@ def session_pay(request, session_id: int):
                     order_id=f"S-{intent.id}",
                     amount_kopeks=amount_kopeks,
                     description=f"WOOM FIT session #{s.id} intent #{intent.id}",
-                    notification_url=notification_url,
-                    success_url=success_url,
-                    fail_url=fail_url,
+                    notification_url=notify_url,
+                    success_url=ok_url,
+                    fail_url=no_url,
                     receipt=receipt,
                     data=build_widget_init_data(request),
                 )
-            except Exception:
+            except Exception as exc:
                 intent.status = PaymentIntent.Status.CANCELED
                 intent.tb_status = "INIT_FAILED"
                 intent.save(update_fields=["status", "tb_status"])
                 if widget_request:
-                    return JsonResponse({"error": "Не удалось создать онлайн-оплату."}, status=400)
-                return render(request, "payments/fail.html", {"error": {"Message": "Init failed"}})
+                    return JsonResponse({"error": "Не удалось создать онлайн-оплату.", "details": str(exc)}, status=400)
+                return render(request, "payments/fail.html", {"error": {"Message": "Init failed", "Details": str(exc)}})
 
             payment_url = str(pay.get("PaymentURL") or "").strip()
             if pay.get("Success") and payment_url:

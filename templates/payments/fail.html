@@ -4,7 +4,21 @@
   <div class="card" style="text-align:center;">
     <div style="font-size:56px;">⚠️</div>
     <div style="font-weight:900; font-size:22px; margin-top:8px;">Оплата не прошла</div>
-    <div class="muted" style="margin-top:8px;">Попробуйте ещ раз или обратитесь в клуб.</div>
+    <div class="muted" style="margin-top:8px;">Попробуйте еще раз или обратитесь в клуб.</div>
+    {% if error %}
+      <div style="margin-top:10px; text-align:left; border:1px solid #e5e7eb; border-radius:12px; padding:10px; background:#f8fafc;">
+        <div style="font-weight:900; color:#334155;">Причина</div>
+        <div class="muted" style="margin-top:4px; word-break:break-word;">
+          {{ error.Message|default:error.error|default:"Неизвестная ошибка" }}
+        </div>
+        {% if error.Details %}
+          <div class="muted" style="margin-top:6px; word-break:break-word;">{{ error.Details }}</div>
+        {% endif %}
+        {% if error.ErrorCode %}
+          <div class="muted" style="margin-top:6px;">Код: {{ error.ErrorCode }}</div>
+        {% endif %}
+      </div>
+    {% endif %}
     <div style="margin-top:14px; display:flex; gap:10px; justify-content:center;">
       <a class="btn btn--ghost" href="{% url 'shop:cart' %}">В корзину</a>
       <a class="btn btn--primary" href="{% url 'shop:index' %}">В магазин</a>
