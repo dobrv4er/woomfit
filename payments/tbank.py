@@ -17,6 +17,14 @@ class TBankClient:
             else os.getenv("TBANK_API_BASE_URL", default_base).strip()
         )
 
+    @staticmethod
+    def _token_value_to_string(value) -> str:
+        # T-Bank notifications include JSON booleans (true/false).
+        # Python str(True/False) gives "True"/"False", which breaks token check.
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        return str(value)
+
     def _token(self, payload: dict) -> str:
         data = payload.copy()
         data["Password"] = self.password
@@ -32,7 +40,7 @@ class TBankClient:
             # Skip nested objects/arrays
             if isinstance(v, (dict, list, tuple)):
                 continue
-            parts.append(str(v))
+            parts.append(self._token_value_to_string(v))
 
         raw = "".join(parts)
         return hashlib.sha256(raw.encode()).hexdigest()
