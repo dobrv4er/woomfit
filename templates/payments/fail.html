@@ -9,7 +9,13 @@
       <div style="margin-top:10px; text-align:left; border:1px solid #e5e7eb; border-radius:12px; padding:10px; background:#f8fafc;">
         <div style="font-weight:900; color:#334155;">Причина</div>
         <div class="muted" style="margin-top:4px; word-break:break-word;">
-          {{ error.Message|default:error.error|default:"Неизвестная ошибка" }}
+          {% if error.Message %}
+            {{ error.Message }}
+          {% elif error.error %}
+            {{ error.error }}
+          {% else %}
+            Неизвестная ошибка
+          {% endif %}
         </div>
         {% if error.Details %}
           <div class="muted" style="margin-top:6px; word-break:break-word;">{{ error.Details }}</div>

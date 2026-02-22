@@ -117,6 +117,12 @@ class TBankClient:
         try:
             body = r.json()
         except ValueError:
-            r.raise_for_status()
-            raise
+            text = (r.text or "").strip()
+            short = text[:700] if text else ""
+            if not r.ok:
+                raise requests.HTTPError(
+                    f"T-Bank Init HTTP {r.status_code}: {short or 'empty response'}",
+                    response=r,
+                )
+            raise ValueError(f"T-Bank Init returned non-JSON response: {short or 'empty response'}")
         return body
