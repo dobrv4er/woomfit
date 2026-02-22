@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from core.legal import client_ip, is_checked
+from payments.integrationjs import build_widget_init_data, is_widget_request
 from payments.receipt import build_receipt, receipt_item
 from payments.tbank import TBankClient
 from shop.cart import Cart
@@ -19,14 +20,6 @@ from wallet.services import debit, get_wallet
 
 from .models import Order, OrderItem
 from .services import fulfill_order
-
-LEGAL_REQUIRED_TEXT = (
-    "Для оплаты необходимо принять публичную оферту и согласие на обработку персональных данных."
-)
-
-
-def _integrationjs_requested(request) -> bool:
-    return (request.POST.get("integrationjs") or "").strip() == "1"
 
 
 def _build_tbank_receipt_for_order(request, order: Order, cart_items: list, total_kopeks: int) -> dict:
@@ -76,27 +69,31 @@ def _checkout_legal_ok(request) -> bool:
     offer_ok = is_checked(request, "agree_offer")
     pd_ok = is_checked(request, "agree_personal_data")
     if not offer_ok or not pd_ok:
-        messages.error(request, LEGAL_REQUIRED_TEXT)
+        messages.error(
+            request,
+            "Для оплаты необходимо принять публичную оферту и согласие на обработку персональных данных.",
+        )
         return False
     return True
 
 
 @login_required
 def checkout(request):
-    wants_json = _integrationjs_requested(request)
     if request.method != "POST":
-        if wants_json:
-            return JsonResponse({"error": "Метод не поддерживается."}, status=405)
         return redirect("shop:cart")
+    widget_request = is_widget_request(request)
     if not _checkout_legal_ok(request):
-        if wants_json:
-            return JsonResponse({"error": LEGAL_REQUIRED_TEXT}, status=400)
+        if widget_request:
+            return JsonResponse(
+                {"error": "Для оплаты необходимо принять оферту и согласие на обработку персональных данных."},
+                status=400,
+            )
         return redirect("shop:cart")
 
     cart = Cart(request)
     items = list(cart)
     if not items:
-        if wants_json:
+        if widget_request:
             return JsonResponse({"error": "Корзина пуста."}, status=400)
         return redirect("shop:cart")
 
@@ -129,8 +126,9 @@ def checkout(request):
         order.save(update_fields=["status", "tb_status"])
         fulfill_order(order)
         cart.clear()
-        if wants_json:
-            return JsonResponse({"paymentUrl": request.build_absolute_uri(reverse("payments:success"))})
+        if widget_request:
+            success_url = request.build_absolute_uri(reverse("payments:success"))
+            return JsonResponse({"paymentUrl": success_url, "PaymentURL": success_url})
         return redirect("payments:success")
 
     client = TBankClient(settings.TBANK_TERMINAL_KEY, settings.TBANK_PASSWORD, settings.TBANK_IS_TEST)
@@ -142,35 +140,41 @@ def checkout(request):
     total_kopeks = int(total) * 100
     receipt = _build_tbank_receipt_for_order(request, order, items, total_kopeks)
 
-    pay = client.init_payment(
-        order_id=str(order.id),
-        amount_kopeks=total_kopeks,  # ✅ копейки
-        description=f"WOOM FIT order #{order.id}",
-        notification_url=notification_url,
-        success_url=success_url,
-        fail_url=fail_url,
-        receipt=receipt,
-        data={"connection_type": "Widget"} if wants_json else None,
-    )
+    try:
+        pay = client.init_payment(
+            order_id=str(order.id),
+            amount_kopeks=total_kopeks,  # ✅ копейки
+            description=f"WOOM FIT order #{order.id}",
+            notification_url=notification_url,
+            success_url=success_url,
+            fail_url=fail_url,
+            receipt=receipt,
+            data=build_widget_init_data(request),
+        )
+    except Exception:
+        order.status = "canceled"
+        order.tb_status = "INIT_FAILED"
+        order.save(update_fields=["status", "tb_status"])
+        if widget_request:
+            return JsonResponse({"error": "Не удалось создать онлайн-оплату."}, status=400)
+        return render(request, "payments/fail.html", {"error": {"Message": "Init failed"}})
 
-    if pay.get("Success"):
+    payment_url = str(pay.get("PaymentURL") or "").strip()
+    if pay.get("Success") and payment_url:
         order.tb_payment_id = str(pay.get("PaymentId") or "")
         order.tb_status = str(pay.get("Status") or "")
         order.status = "payment_pending"
         order.save(update_fields=["tb_payment_id", "tb_status", "status"])
         cart.clear()
-        if wants_json:
-            payment_url = str(pay.get("PaymentURL") or "").strip()
-            if not payment_url:
-                return JsonResponse({"error": "Платёж создан без ссылки на оплату."}, status=502)
-            return JsonResponse({"paymentUrl": payment_url, "paymentId": order.tb_payment_id})
-        return redirect(pay["PaymentURL"])
+        if widget_request:
+            return JsonResponse({"paymentUrl": payment_url, "PaymentURL": payment_url})
+        return redirect(payment_url)
 
     order.status = "canceled"
     order.tb_status = str(pay.get("Status") or "")
     order.save(update_fields=["status", "tb_status"])
-    if wants_json:
-        return JsonResponse({"error": "Не удалось создать платёж в T-Bank.", "details": pay}, status=400)
+    if widget_request:
+        return JsonResponse({"error": "Не удалось создать онлайн-оплату.", "details": pay}, status=400)
     return render(request, "payments/fail.html", {"error": pay})
 
 

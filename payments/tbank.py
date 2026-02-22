@@ -67,7 +67,11 @@ class TBankClient:
         receipt: dict | None = None,
         data: dict | None = None,
         redirect_due_date: str | None = None,
+        extra: dict | None = None,
     ):
+        if not self.terminal_key or not self.password:
+            raise ValueError("Не настроены TBANK_TERMINAL_KEY и TBANK_PASSWORD.")
+
         payload = {
             "TerminalKey": self.terminal_key,
             "Amount": amount_kopeks,
@@ -85,9 +89,34 @@ class TBankClient:
             payload["Receipt"] = receipt
         if redirect_due_date:
             payload["RedirectDueDate"] = redirect_due_date
+        if extra:
+            protected = {
+                "Password",
+                "Token",
+                "TerminalKey",
+                "Amount",
+                "OrderId",
+                "Description",
+                "NotificationURL",
+                "SuccessURL",
+                "FailURL",
+                "Receipt",
+            }
+            for key, value in extra.items():
+                if key in protected:
+                    continue
+                if key == "DATA" and isinstance(value, dict):
+                    base_data = payload.get("DATA") if isinstance(payload.get("DATA"), dict) else {}
+                    payload["DATA"] = {**base_data, **value}
+                    continue
+                payload[key] = value
 
         payload["Token"] = self._token(payload)
 
         r = requests.post(f"{self.base_url}/Init", json=payload, timeout=15)
-        r.raise_for_status()
-        return r.json()
+        try:
+            body = r.json()
+        except ValueError:
+            r.raise_for_status()
+            raise
+        return body

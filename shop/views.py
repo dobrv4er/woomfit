@@ -134,7 +134,7 @@ def cart_view(request):
             "total_rub": total_rub,
             "wallet_balance": wallet_balance,
             "can_pay_wallet": can_pay_wallet,
-            "tbank_terminal_key": getattr(settings, "TBANK_TERMINAL_KEY", ""),
+            "tbank_terminal_key": settings.TBANK_TERMINAL_KEY,
         },
     )
 

@@ -12,6 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from core.telegram_notify import notify_rent_request_paid
+from payments.integrationjs import build_widget_init_data, is_widget_request
 from schedule.models import Booking, Trainer, Session, RentPaymentIntent, RentRequest
 
 
@@ -348,46 +349,46 @@ def rent(request):
 
     selected_slot_start = _parse_slot_key(selected_slot)
     payment_method = ((request.POST.get("method") or "online").strip() if request.method == "POST" else "online")
-    wants_json = request.method == "POST" and (request.POST.get("integrationjs") or "").strip() == "1"
     intent_for_redirect = None
+    widget_request = request.method == "POST" and is_widget_request(request)
 
-    def _reject_payment(message: str):
-        messages.error(request, message)
-        if wants_json:
+    def payment_error(message: str):
+        if widget_request:
             return JsonResponse({"error": message}, status=400)
+        messages.error(request, message)
         return None
 
     if request.method == "POST":
         if payment_method not in {"online", "wallet"}:
-            err = _reject_payment("Выберите способ оплаты.")
-            if err:
-                return err
+            error_response = payment_error("Выберите способ оплаты.")
+            if error_response:
+                return error_response
         elif payment_method == "wallet" and not request.user.is_authenticated:
-            err = _reject_payment("Для оплаты из кошелька войдите в аккаунт.")
-            if err:
-                return err
+            error_response = payment_error("Для оплаты из кошелька войдите в аккаунт.")
+            if error_response:
+                return error_response
         elif not selected_slot_start:
-            err = _reject_payment("Выберите свободный слот в сетке.")
-            if err:
-                return err
+            error_response = payment_error("Выберите свободный слот в сетке.")
+            if error_response:
+                return error_response
         elif selected_slot_start <= timezone.localtime(timezone.now()):
-            err = _reject_payment("Нельзя бронировать прошедшее время.")
-            if err:
-                return err
+            error_response = payment_error("Нельзя бронировать прошедшее время.")
+            if error_response:
+                return error_response
         elif not (RENT_OPEN_HOUR <= selected_slot_start.hour < RENT_CLOSE_HOUR):
-            err = _reject_payment("Выберите слот в рабочем диапазоне аренды.")
-            if err:
-                return err
+            error_response = payment_error("Выберите слот в рабочем диапазоне аренды.")
+            if error_response:
+                return error_response
         elif not contact["full_name"]:
-            err = _reject_payment("Укажите имя.")
-            if err:
-                return err
+            error_response = payment_error("Укажите имя.")
+            if error_response:
+                return error_response
         else:
             phone_digits = _clean_phone(contact["phone"])
             if len(phone_digits) != 11 or not phone_digits.startswith("7"):
-                err = _reject_payment("Телефон должен быть в формате +7 999 999 99 99.")
-                if err:
-                    return err
+                error_response = payment_error("Телефон должен быть в формате +7 999 999 99 99.")
+                if error_response:
+                    return error_response
             else:
                 with transaction.atomic():
                     slot_end = selected_slot_start + timedelta(minutes=RENT_SLOT_MIN)
@@ -404,9 +405,9 @@ def rent(request):
                         lock=True,
                     )
                     if _slot_is_busy(selected_slot_start, sessions, pending_intents):
-                        err = _reject_payment("Этот слот уже занят. Выберите другой.")
-                        if err:
-                            return err
+                        error_response = payment_error("Этот слот уже занят. Выберите другой.")
+                        if error_response:
+                            return error_response
                     else:
                         now = timezone.now()
                         intent_for_redirect = RentPaymentIntent.objects.create(
@@ -437,12 +438,12 @@ def rent(request):
                                     ),
                                 )
                             except ValidationError:
-                                err = _reject_payment("Недостаточно средств в кошельке.")
-                                if err:
-                                    return err
+                                error_response = payment_error("Недостаточно средств в кошельке.")
                                 intent_for_redirect.status = RentPaymentIntent.Status.CANCELED
                                 intent_for_redirect.tb_status = "WALLET_INSUFFICIENT"
                                 intent_for_redirect.save(update_fields=["status", "tb_status"])
+                                if error_response:
+                                    return error_response
                             else:
                                 trainer, _ = Trainer.objects.get_or_create(name=RENT_TRAINER_NAME)
                                 session_title = f"Аренда зала — {contact['full_name']}".strip()[:160]
@@ -500,35 +501,33 @@ def rent(request):
                     success_url=success_url,
                     fail_url=fail_url,
                     receipt=receipt,
-                    data={"connection_type": "Widget"} if wants_json else None,
                     redirect_due_date=intent_for_redirect.expires_at.isoformat(timespec="seconds"),
+                    data=build_widget_init_data(request),
                 )
             except Exception:
                 intent_for_redirect.status = RentPaymentIntent.Status.CANCELED
                 intent_for_redirect.tb_status = "INIT_FAILED"
                 intent_for_redirect.save(update_fields=["status", "tb_status"])
-                err = _reject_payment("Не удалось создать оплату. Попробуйте ещё раз.")
-                if err:
-                    return err
+                if widget_request:
+                    return JsonResponse({"error": "Не удалось создать онлайн-оплату."}, status=400)
+                messages.error(request, "Не удалось создать оплату. Попробуйте ещё раз.")
                 return redirect(f"{reverse('core:rent')}?week={selected_week.isoformat()}")
 
-            if pay.get("Success"):
+            payment_url = str(pay.get("PaymentURL") or "").strip()
+            if pay.get("Success") and payment_url:
                 intent_for_redirect.tb_payment_id = str(pay.get("PaymentId") or "")
                 intent_for_redirect.tb_status = str(pay.get("Status") or "")
                 intent_for_redirect.status = RentPaymentIntent.Status.PENDING
                 intent_for_redirect.save(update_fields=["tb_payment_id", "tb_status", "status"])
-                if wants_json:
-                    payment_url = str(pay.get("PaymentURL") or "").strip()
-                    if not payment_url:
-                        return JsonResponse({"error": "Платёж создан без ссылки на оплату."}, status=502)
-                    return JsonResponse({"paymentUrl": payment_url, "paymentId": intent_for_redirect.tb_payment_id})
-                return redirect(pay["PaymentURL"])
+                if widget_request:
+                    return JsonResponse({"paymentUrl": payment_url, "PaymentURL": payment_url})
+                return redirect(payment_url)
 
             intent_for_redirect.status = RentPaymentIntent.Status.CANCELED
             intent_for_redirect.tb_status = str(pay.get("Status") or "")
             intent_for_redirect.save(update_fields=["status", "tb_status"])
-            if wants_json:
-                return JsonResponse({"error": "Не удалось создать оплату в T-Bank.", "details": pay}, status=400)
+            if widget_request:
+                return JsonResponse({"error": "Не удалось создать онлайн-оплату.", "details": pay}, status=400)
             messages.error(request, "Не удалось создать оплату. Попробуйте ещё раз.")
 
     week_days = [selected_week + timedelta(days=i) for i in range(7)]
@@ -603,12 +602,12 @@ def rent(request):
         "price_rub": RENT_PRICE_RUB,
         "payment_ttl_min": RENT_PAYMENT_TTL_MIN,
         "wallet_balance": wallet_balance,
-        "tbank_terminal_key": getattr(settings, "TBANK_TERMINAL_KEY", ""),
         "contact": contact,
         "selected_week_iso": selected_week.isoformat(),
         "booked_slots": booked_slots,
         "show_paid_rent_details": bool(viewer_user_id),
         "show_my_paid_rent_legend": show_my_paid_rent_legend,
+        "tbank_terminal_key": settings.TBANK_TERMINAL_KEY,
     })
 
 

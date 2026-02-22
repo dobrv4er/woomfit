@@ -13,6 +13,7 @@ from django.db import transaction
 
 from core.telegram_notify import notify_booking_canceled, notify_booking_created
 from core.legal import client_ip, is_checked
+from payments.integrationjs import build_widget_init_data, is_widget_request
 from payments.receipt import build_receipt, receipt_item
 
 from .models import Session, Booking, PaymentIntent
@@ -389,20 +390,12 @@ def session_choose_payment(request, session_id: int):
 def session_pay(request, session_id: int):
     """Оплата разового занятия: кошелёк или онлайн."""
     s = get_object_or_404(Session, id=session_id)
-    wants_json = request.method == "POST" and (request.POST.get("integrationjs") or "").strip() == "1"
-
-    def _json_error(message: str, status: int = 400):
-        return JsonResponse({"error": message}, status=status)
 
     if getattr(s, "kind", "group") != "group":
-        if wants_json:
-            return _json_error("Эта тренировка недоступна для оплаты")
         messages.error(request, "Эта тренировка недоступна для оплаты")
         return redirect("schedule:list")
 
     if getattr(s, "seats_left", 0) <= 0:
-        if wants_json:
-            return _json_error("Свободных мест нет")
         messages.error(request, "Свободных мест нет")
         return redirect("schedule:detail", session_id=s.id)
 
@@ -417,19 +410,21 @@ def session_pay(request, session_id: int):
     wallet_balance = int(wallet.balance)
 
     if request.method == "POST":
+        widget_request = is_widget_request(request)
         method = (request.POST.get("method") or "").strip()
         if method not in {"wallet", "online"}:
-            if wants_json:
-                return _json_error("Выберите способ оплаты")
+            if widget_request:
+                return JsonResponse({"error": "Выберите способ оплаты."}, status=400)
             messages.error(request, "Выберите способ оплаты")
             return redirect("schedule:pay", session_id=s.id)
 
         offer_ok = is_checked(request, "agree_offer")
         pd_ok = is_checked(request, "agree_personal_data")
         if not offer_ok or not pd_ok:
-            if wants_json:
-                return _json_error(
-                    "Для оплаты необходимо принять публичную оферту и согласие на обработку персональных данных."
+            if widget_request:
+                return JsonResponse(
+                    {"error": "Для оплаты необходимо принять оферту и согласие на обработку персональных данных."},
+                    status=400,
                 )
             messages.error(
                 request,
@@ -439,8 +434,8 @@ def session_pay(request, session_id: int):
 
         if method == "wallet":
             if wallet.balance < Decimal(str(amount_rub)):
-                if wants_json:
-                    return _json_error("Недостаточно средств в кошельке")
+                if widget_request:
+                    return JsonResponse({"error": "Недостаточно средств в кошельке."}, status=400)
                 messages.error(request, "Недостаточно средств в кошельке")
                 return redirect("schedule:pay", session_id=s.id)
 
@@ -451,8 +446,8 @@ def session_pay(request, session_id: int):
                     reason=f"Оплата разового занятия: {s.title} ({timezone.localtime(s.start_at).strftime('%d.%m %H:%M')})",
                 )
             except ValidationError as e:
-                if wants_json:
-                    return _json_error(str(e) or "Не удалось списать средства из кошелька")
+                if widget_request:
+                    return JsonResponse({"error": str(e) or "Не удалось списать средства из кошелька."}, status=400)
                 messages.error(request, str(e) or "Не удалось списать средства из кошелька")
                 return redirect("schedule:pay", session_id=s.id)
 
@@ -508,34 +503,40 @@ def session_pay(request, session_id: int):
                 [receipt_item(name=f"Разовое посещение: {s.title}", price_kopeks=amount_kopeks, quantity=1)],
             )
 
-            pay = client.init_payment(
-                order_id=f"S-{intent.id}",
-                amount_kopeks=amount_kopeks,
-                description=f"WOOM FIT session #{s.id} intent #{intent.id}",
-                notification_url=notification_url,
-                success_url=success_url,
-                fail_url=fail_url,
-                receipt=receipt,
-                data={"connection_type": "Widget"} if wants_json else None,
-            )
+            try:
+                pay = client.init_payment(
+                    order_id=f"S-{intent.id}",
+                    amount_kopeks=amount_kopeks,
+                    description=f"WOOM FIT session #{s.id} intent #{intent.id}",
+                    notification_url=notification_url,
+                    success_url=success_url,
+                    fail_url=fail_url,
+                    receipt=receipt,
+                    data=build_widget_init_data(request),
+                )
+            except Exception:
+                intent.status = PaymentIntent.Status.CANCELED
+                intent.tb_status = "INIT_FAILED"
+                intent.save(update_fields=["status", "tb_status"])
+                if widget_request:
+                    return JsonResponse({"error": "Не удалось создать онлайн-оплату."}, status=400)
+                return render(request, "payments/fail.html", {"error": {"Message": "Init failed"}})
 
-            if pay.get("Success"):
+            payment_url = str(pay.get("PaymentURL") or "").strip()
+            if pay.get("Success") and payment_url:
                 intent.tb_payment_id = str(pay.get("PaymentId") or "")
                 intent.tb_status = str(pay.get("Status") or "")
                 intent.status = PaymentIntent.Status.PENDING
                 intent.save(update_fields=["tb_payment_id", "tb_status", "status"])
-                if wants_json:
-                    payment_url = str(pay.get("PaymentURL") or "").strip()
-                    if not payment_url:
-                        return _json_error("Платёж создан без ссылки на оплату.", status=502)
-                    return JsonResponse({"paymentUrl": payment_url, "paymentId": intent.tb_payment_id})
-                return redirect(pay["PaymentURL"])
+                if widget_request:
+                    return JsonResponse({"paymentUrl": payment_url, "PaymentURL": payment_url})
+                return redirect(payment_url)
 
             intent.status = PaymentIntent.Status.CANCELED
             intent.tb_status = str(pay.get("Status") or "")
             intent.save(update_fields=["status", "tb_status"])
-            if wants_json:
-                return JsonResponse({"error": "Не удалось создать оплату в T-Bank.", "details": pay}, status=400)
+            if widget_request:
+                return JsonResponse({"error": "Не удалось создать онлайн-оплату.", "details": pay}, status=400)
             return render(request, "payments/fail.html", {"error": pay})
 
     return render(
@@ -545,7 +546,7 @@ def session_pay(request, session_id: int):
             "s": s,
             "amount_rub": amount_rub,
             "wallet_balance": wallet_balance,
-            "tbank_terminal_key": getattr(settings, "TBANK_TERMINAL_KEY", ""),
+            "tbank_terminal_key": settings.TBANK_TERMINAL_KEY,
         },
     )
 

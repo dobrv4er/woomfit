@@ -52,13 +52,7 @@
       </div>
 
       <div style="margin-top:14px; display:grid; gap:10px;">
-        <form
-          id="shopCheckoutForm"
-          method="post"
-          action="{% url 'orders:checkout' %}"
-          data-terminal-key="{{ tbank_terminal_key|default:''|escape }}"
-          style="display:grid; gap:10px;"
-        >
+        <form id="cartCheckoutForm" method="post" action="{% url 'orders:checkout' %}" style="display:grid; gap:10px;">
           {% csrf_token %}
           <label style="display:flex; gap:8px; align-items:flex-start; font-weight:800; color:#334155; margin-bottom:8px; font-size:13px;">
             <input type="checkbox" name="agree_offer" required style="width:16px; margin-top:2px;">
@@ -75,13 +69,22 @@
             </span>
           </label>
           <div
-            id="tbankWidgetCart"
-            style="display:grid; min-height:52px; border-radius:14px; overflow:hidden;"
+            id="orderWidgetContainer"
+            hidden
+            style="border:1px solid var(--border); border-radius:12px; padding:10px; background:#fff;"
           ></div>
-          <div id="tbankWidgetCartError" class="muted" style="font-weight:800; text-align:center;"></div>
-          <button id="shopCheckoutFallbackBtn" class="btn btn--primary btn--full" type="submit">
-            Оплатить картой
-          </button>
+          <div id="orderWidgetError" class="muted" hidden style="font-weight:800; color:#b91c1c;"></div>
+          <button id="orderOnlineFallbackBtn" class="btn btn--primary btn--full" type="submit">Оплатить картой</button>
+          <div
+            data-tbank-widget
+            data-container-id="orderWidgetContainer"
+            data-form-id="cartCheckoutForm"
+            data-endpoint="{% url 'orders:checkout' %}"
+            data-terminal-key="{{ tbank_terminal_key }}"
+            data-product="eacq"
+            data-error-id="orderWidgetError"
+            data-fallback-button-id="orderOnlineFallbackBtn"
+          ></div>
           <button
             class="btn btn--muted btn--full"
             type="submit"
@@ -115,75 +118,4 @@
       </div>
     </div>
   {% endif %}
-
-  <script>
-    window.onPaymentIntegrationLoad = function() {};
-    (function() {
-      const form = document.getElementById("shopCheckoutForm");
-      const errorNode = document.getElementById("tbankWidgetCartError");
-      const fallbackBtn = document.getElementById("shopCheckoutFallbackBtn");
-      if (!form || !fallbackBtn) return;
-      const isAuthenticated = {{ user.is_authenticated|yesno:"true,false" }};
-      if (!isAuthenticated) return;
-
-      const terminalKey = (form.getAttribute("data-terminal-key") || "").trim();
-      if (!terminalKey) return;
-
-      function setError(text) {
-        if (!errorNode) return;
-        errorNode.textContent = text || "";
-      }
-
-      async function startPayment() {
-        const offer = form.querySelector('input[name="agree_offer"]');
-        const pd = form.querySelector('input[name="agree_personal_data"]');
-        if (offer && !offer.checked) {
-          throw new Error("Примите публичную оферту перед оплатой.");
-        }
-        if (pd && !pd.checked) {
-          throw new Error("Подтвердите согласие на обработку персональных данных.");
-        }
-
-        const payload = new FormData(form);
-        payload.set("integrationjs", "1");
-
-        const response = await fetch(form.action, {
-          method: "POST",
-          body: payload,
-          headers: {"X-Requested-With": "XMLHttpRequest"},
-        });
-
-        let data = {};
-        try {
-          data = await response.json();
-        } catch (e) {}
-
-        if (!response.ok || !data.paymentUrl) {
-          throw new Error((data && data.error) || "Не удалось создать оплату в T-Bank.");
-        }
-        return data.paymentUrl;
-      }
-
-      window.onPaymentIntegrationLoad = async function() {
-        if (typeof PaymentIntegration === "undefined") return;
-        try {
-          const integration = await PaymentIntegration.init({
-            terminalKey: terminalKey,
-            language: "ru",
-          });
-          await integration.payments.setPaymentStartCallback(async function() {
-            setError("");
-            return startPayment();
-          });
-          const payment = await integration.payments.create("shop-cart", {});
-          await payment.mount("tbankWidgetCart");
-          fallbackBtn.style.display = "none";
-        } catch (error) {
-          setError("Виджет T-Bank недоступен, используйте кнопку оплаты ниже.");
-          console.error(error);
-        }
-      };
-    })();
-  </script>
-  <script src="https://integrationjs.tbank.ru/integration.js" onload="onPaymentIntegrationLoad()" async></script>
 {% endblock %}
