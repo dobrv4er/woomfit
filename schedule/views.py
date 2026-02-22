@@ -524,6 +524,7 @@ def session_pay(request, session_id: int):
                     fail_url=no_url,
                     receipt=receipt,
                     data=build_widget_init_data(request),
+                    extra={"PayType": settings.TBANK_PAY_TYPE} if settings.TBANK_PAY_TYPE else None,
                 )
             except Exception as exc:
                 intent.status = PaymentIntent.Status.CANCELED

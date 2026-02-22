@@ -122,6 +122,7 @@ TBANK_FFD_VERSION=1.2
 TBANK_ITEM_PAYMENT_METHOD=full_payment
 TBANK_ITEM_PAYMENT_OBJECT=service
 TBANK_ITEM_MEASUREMENT_UNIT=шт
+TBANK_PAY_TYPE=O
 
 # email-восстановление пароля
 DJANGO_EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
@@ -141,3 +142,4 @@ PASSWORD_RESET_BASE_URL=https://ваш-домен.ru
 - обязательные чекбоксы согласия на регистрации и перед оплатой;
 - сохранение факта согласия (дата/IP) для пользователя и платежных сущностей;
 - фискальный `Receipt` для T‑Bank с `Taxation`, `FfdVersion`, `PaymentMethod`, `PaymentObject`, `Tax`, `Email/Phone`.
+- для отображения СБП в платежной форме используется `PayType=O` (одностадийная оплата); при сумме ниже 10 ₽ СБП у провайдера не показывается.

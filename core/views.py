@@ -514,6 +514,7 @@ def rent(request):
                     receipt=receipt,
                     redirect_due_date=intent_for_redirect.expires_at.isoformat(timespec="seconds"),
                     data=build_widget_init_data(request),
+                    extra={"PayType": settings.TBANK_PAY_TYPE} if settings.TBANK_PAY_TYPE else None,
                 )
             except Exception as exc:
                 intent_for_redirect.status = RentPaymentIntent.Status.CANCELED

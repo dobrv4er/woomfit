@@ -203,6 +203,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 TBANK_TERMINAL_KEY = os.getenv("TBANK_TERMINAL_KEY", "")
 TBANK_PASSWORD = os.getenv("TBANK_PASSWORD", "")  # именно SecretKey!
 TBANK_IS_TEST = os.getenv("TBANK_IS_TEST", "1") in ("1", "true", "True", "yes")
+TBANK_PAY_TYPE = (os.getenv("TBANK_PAY_TYPE", "O") or "").strip().upper()
+if TBANK_PAY_TYPE not in ("", "O", "T"):
+    TBANK_PAY_TYPE = "O"
 
 
 TBANK_NOTIFICATION_URL = os.getenv("TBANK_NOTIFICATION_URL", "")
