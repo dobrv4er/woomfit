@@ -1,4 +1,5 @@
 import hashlib
+import os
 import requests
 
 
@@ -6,10 +7,14 @@ class TBankClient:
     def __init__(self, terminal_key, password, is_test=True):
         self.terminal_key = terminal_key
         self.password = password
+        # According to current T-Bank eAcq API docs (2026),
+        # Init/Confirm/etc are served from securepay.tinkoff.ru for both test and prod.
+        # Keep env override to simplify emergency switch without code edits.
+        default_base = "https://securepay.tinkoff.ru/v2"
         self.base_url = (
-            "https://rest-api-test.tinkoff.ru/v2"
+            os.getenv("TBANK_API_BASE_URL_TEST", default_base).strip()
             if is_test
-            else "https://rest-api.tinkoff.ru/v2"
+            else os.getenv("TBANK_API_BASE_URL", default_base).strip()
         )
 
     def _token(self, payload: dict) -> str:
