@@ -18,7 +18,7 @@ from core.telegram_notify import (
     notify_session_payment,
 )
 from orders.models import Order
-from orders.services import fulfill_order
+from orders.services import fulfill_order, revoke_order
 
 from loyalty.services import add_spent
 
@@ -206,9 +206,13 @@ def tbank_webhook(request: HttpRequest):
                         purchase=_order_purchase_summary(order),
                     )
                 return HttpResponse("OK", status=200, content_type="text/plain")
-            elif status.upper() in ("CANCELED", "REJECTED", "DEADLINE_EXPIRED"):
+            elif status.upper() in ("CANCELED", "REJECTED", "DEADLINE_EXPIRED", "REFUNDED"):
                 order.status = "canceled"
-            order.save(update_fields=["tb_status", "status"])
+                order.save(update_fields=["tb_status", "status"])
+                if status.upper() == "REFUNDED":
+                    revoke_order(order)
+                return HttpResponse("OK", status=200, content_type="text/plain")
+            order.save(update_fields=["tb_status"])
 
     # --- оплата разового занятия: OrderId = S-<intent_id> ---
     if order_id.startswith("S-"):
